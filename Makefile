@@ -3,15 +3,17 @@ VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 LDFLAGS     := -s -w -X '$(PROJECT_PKG)/internal/cli.Version=$(VERSION)' -X '$(PROJECT_PKG)/internal/cli.BuildEdition=ce'
 BIN         := bin/choreoatlas
 
-.PHONY: help build test lint clean
+.PHONY: help build test lint clean deps run-example
 
 help:
 	@echo "ChoreoAtlas CLI - Community Edition Build"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build         - Build Community Edition"
+	@echo "  deps          - Install dependencies"
 	@echo "  test          - Run tests"
 	@echo "  lint          - Run linter"
+	@echo "  run-example   - Run example validation"
 	@echo "  clean         - Clean build artifacts"
 
 build:
@@ -25,6 +27,16 @@ test:
 
 lint:
 	golangci-lint run || true
+
+deps:
+	@echo "Installing dependencies..."
+	go mod download
+	go mod tidy
+
+run-example: build
+	@echo "Running example validation..."
+	$(BIN) lint --flow examples/flows/order-fulfillment.flowspec.yaml
+	$(BIN) validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
 
 clean:
 	rm -rf bin

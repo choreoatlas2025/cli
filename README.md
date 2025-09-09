@@ -1,278 +1,224 @@
 # ChoreoAtlas CLI
 
-交互逻辑治理平台 - **Map. Verify. Steer** cross-service choreography.
+**Map. Verify. Steer** cross-service choreography
 
-基于"发现-规范-指导"的闭环理念，支持双规约模式（ServiceSpec 与 FlowSpec），提供 Atlas Scout（探索）、Atlas Proof（校验）、Atlas Pilot（指导）等组件。
+ChoreoAtlas is a Contract-as-Code platform for interactive logic governance, following the "Discover-Specify-Guide" closed-loop concept. It supports dual contract mode (ServiceSpec & FlowSpec) and provides Atlas Scout (Discovery), Atlas Proof (Verification), and Atlas Pilot (Guidance) components.
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 安装依赖
+### Installation
 
+#### Docker (Recommended)
 ```bash
-make deps
+docker run --rm ghcr.io/choreoatlas2025/cli:latest --help
 ```
 
-### 构建
-
+#### Homebrew (Coming Soon)
 ```bash
-make build
+brew tap choreoatlas2025/tap
+brew install choreoatlas
 ```
 
-### 基础用法
+#### Manual Download
+Download the appropriate binary from our [releases page](https://github.com/choreoatlas2025/cli/releases) and add it to your PATH.
+
+### Basic Usage
 
 ```bash
-# 静态校验（含 JSON Schema 验证）
-./bin/flowspec lint --flow examples/flows/order-fulfillment.flowspec.yaml
+# Static validation (includes JSON Schema validation)
+choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
 
-# 动态验证
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --edition ce
+# Dynamic validation against trace data
+choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
 
-# 生成 JSON 报告
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --report-format json --report-out report.json
+# Generate reports (JSON, JUnit, HTML)
+choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --report-format html --report-out report.html
 
-# 生成 JUnit 报告 (适合 CI)
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --report-format junit --report-out report.xml
+# Discover FlowSpec from trace data
+choreoatlas discover --trace examples/traces/successful-order.trace.json --out discovered.yaml
 
-# 从 trace 探索生成 FlowSpec
-./bin/flowspec discover --trace examples/traces/successful-order.trace.json --out discovered.yaml --title "探索的流程"
-
-# CI 门禁模式
-./bin/flowspec ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --edition ce
-
-# 运行完整示例验证
-make run-example
-
-# M4 企业级功能使用示例
-
-# HTML 报告 - 离线可用的企业级报告
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --report-format html --report-out report.html
-
-# 基线门控 - 记录基线
-./bin/flowspec baseline record --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --out baseline.json
-
-# 基线门控 - 带阈值验证
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --baseline baseline.json --threshold-steps 0.9 --threshold-conds 0.95
-
-# DAG 格式校验 - 支持复杂并发流程
-./bin/flowspec lint --flow examples/flows/order-fulfillment-dag.flowspec.yaml
-./bin/flowspec validate --flow examples/flows/order-fulfillment-dag.flowspec.yaml --trace examples/traces/dag-order-trace.json --causality temporal
-
-# 因果校验模式
-./bin/flowspec validate --flow examples/flows/order-fulfillment-dag.flowspec.yaml --trace examples/traces/dag-order-trace.json --causality strict  # 严格模式：需要父子关系
-./bin/flowspec validate --flow examples/flows/order-fulfillment-dag.flowspec.yaml --trace examples/traces/dag-order-trace.json --causality temporal # 时序模式：基于时间戳
-./bin/flowspec validate --flow examples/flows/order-fulfillment-dag.flowspec.yaml --trace examples/traces/dag-order-trace.json --causality off     # 关闭因果检查
-
-# M3 企业级功能使用示例
-
-# PII 脱敏 (Pro-Privacy)
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/pii-test.trace.json --mask-policy policies/pii.yaml --edition pro-privacy
-
-# OTLP JSON 导入 (Pro-Free+)
-./bin/flowspec validate --flow examples/flows/order-fulfillment-parallel.flowspec.yaml --otlp-json examples/traces/parallel-otlp.json --edition pro-free
+# CI gate mode (combines lint + validate with proper exit codes)
+choreoatlas ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
 ```
 
-## ✨ 核心特性
-
-### M4 企业级增强功能 (当前版本)
-- **HTML 报告系统**: 离线可用的企业级报告，包含覆盖度统计、详细表格和甘特图时间轴
-- **基线门控**: 可配置的步骤覆盖率(90%)和条件通过率(95%)阈值，支持CI/CD质量门禁
-- **DAG 语义**: 全新图格式规约，支持因果校验(strict/temporal/off)和并发流程建模
-
-### M3 企业级增强功能
-- **PII 脱敏防护**: 5种脱敏策略 (redact/hash/keep-prefix/tokenize/null)，YAML 策略配置
-- **OTLP JSON 导入**: 完整支持 OpenTelemetry 标准格式，resourceSpans/scopeSpans 解析
-- **因果并发校验**: 基于父子 Span 关系的调用图分析，支持并发步骤验证
-- **覆盖度报告**: 步骤/条件级统计，服务覆盖度分析，JSON/JUnit 双格式输出
-- **CEL 语义校验**: 基于 Google CEL 的前置/后置条件校验
-
-### M1 增强功能
-- **JSON Schema 严格校验**: 结构化验证 FlowSpec 和 ServiceSpec 格式
-- **结构化报告生成**: 支持 JSON 和 JUnit XML 格式，无缝 CI 集成
-- **探索式规约生成**: 从 trace.json 半自动生成 FlowSpec 雏形
-- **严格时序校验**: 基于时间戳的步骤顺序验证
-
-### MVP 基础功能
-- **静态校验 (Lint)**: 验证 FlowSpec 自洽性、服务引用合法性、变量依赖连贯性
-- **动态验证 (Validate)**: 将 FlowSpec 与实际执行追踪进行匹配验证
-- **版本分层**: 支持 CE、Pro-Free、Pro-Privacy、Cloud 等不同功能级别
-- **CI 集成**: 提供非零退出码以支持 CI/CD 流水线集成
-
-## 业务示例
-
-项目包含完整的"下单-扣库存-发货"电商流程示例：
-
-- `examples/flows/order-fulfillment.flowspec.yaml` - 传统流程规约格式
-- `examples/flows/order-fulfillment-dag.flowspec.yaml` - DAG图格式规约
-- `examples/services/` - 各服务契约规约
-- `examples/traces/` - 成功和失败场景的追踪数据
-
-## 🎯 M4 新功能详解
-
-### HTML 报告系统
-生成离线可用的企业级HTML报告，包含：
-- **Summary区**: 覆盖率统计（steps=5, covered=5(100%), condPass=96% 等）
-- **详细表格**: 每步状态与断言详情（含 SKIP 原因）  
-- **甘特图时间轴**: 按 Start/EndNanos 展示执行时序
-- **基线门控结果**: 实时显示阈值检查状态
+### Docker Usage Examples
 
 ```bash
-# 生成HTML报告
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml \
-  --trace examples/traces/successful-order.trace.json \
-  --report-format html --report-out report.html \
-  --baseline baseline.json --threshold-steps 0.9 --threshold-conds 0.95
+# Mount examples directory and run validation
+docker run --rm -v $(pwd)/examples:/examples ghcr.io/choreoatlas2025/cli:latest lint --flow /examples/flows/order-fulfillment.flowspec.yaml
+
+# Generate HTML report
+docker run --rm -v $(pwd):/workspace ghcr.io/choreoatlas2025/cli:latest validate \
+  --flow /workspace/examples/flows/order-fulfillment.flowspec.yaml \
+  --trace /workspace/examples/traces/successful-order.trace.json \
+  --report-format html --report-out /workspace/report.html
 ```
 
-### 基线门控系统
-支持质量阈值管控，确保代码质量：
+## ✨ Core Features
 
-```bash
-# 1. 记录基线（通常在主分支执行）
-./bin/flowspec baseline record \
-  --flow examples/flows/order-fulfillment.flowspec.yaml \
-  --trace examples/traces/successful-order.trace.json \
-  --out baseline.json
+### Contract-as-Code Approach
+- **FlowSpec**: Central choreography specification defining step sequences, service calls, and variable flow
+- **ServiceSpec**: Per-service contracts with operation specifications, preconditions, and postconditions
+- **Dual Validation**: Both static (lint) and dynamic (runtime trace) validation
 
-# 2. 在PR/分支中验证是否达标
-./bin/flowspec validate \
-  --flow examples/flows/order-fulfillment.flowspec.yaml \
-  --trace examples/traces/test.trace.json \
-  --baseline baseline.json \
-  --threshold-steps 0.9    # 90% 步骤覆盖率
-  --threshold-conds 0.95   # 95% 条件通过率
-  --skip-as-fail          # 将SKIP条件视为FAIL
+### Atlas Components
+- **Atlas Scout** (`discover`): Generate FlowSpec from trace exploration
+- **Atlas Proof** (`validate`): Verify choreography matches actual execution
+- **Atlas Pilot** (`lint`): Static validation and guidance
 
-# 返回不同退出码：
-# 0: 全部通过
-# 3: 验证失败  
-# 4: 门控失败
-```
+### Enterprise Features (Community Edition)
+- **JSON Schema Validation**: Structured validation of FlowSpec and ServiceSpec formats
+- **Multiple Report Formats**: JSON, JUnit XML, and HTML reports for seamless CI integration
+- **Trace-based Discovery**: Semi-automatic FlowSpec generation from trace.json
+- **Temporal Validation**: Timestamp-based step sequence verification
+- **CI/CD Integration**: Non-zero exit codes for pipeline integration
 
-### DAG 语义格式
-支持复杂并发流程建模，替代传统线性flow格式：
+## 📋 Contract Structure
 
+### FlowSpec Format
 ```yaml
-# 传统 flow 格式
+info:
+  title: "Order Fulfillment Process"
+  version: "1.0.0"
+services:
+  orderService:
+    spec: "./services/order-service.servicespec.yaml"
+  inventoryService:
+    spec: "./services/inventory-service.servicespec.yaml"
 flow:
-  - step: "创建订单"
+  - step: "Create Order"
     call: "orderService.createOrder"
-  - step: "库存扣减" 
+    input:
+      customerId: "${customerId}"
+      items: "${items}"
+    output:
+      orderResponse: "response.body"
+  - step: "Reserve Inventory"
     call: "inventoryService.reserveInventory"
-
-# 新 DAG 格式 - 支持并发和复杂依赖关系
-graph:
-  nodes:
-    - id: createOrder
-      call: orderService.createOrder
-      input:
-        customerId: "${customerId}"
-      output:
-        orderResponse: response.body
-    - id: reserveInventory
-      call: inventoryService.reserveInventory
-      input:
-        orderId: "${orderResponse.orderId}"
-    - id: checkRisk  # 与库存扣减并发执行
-      call: riskService.check
-      input:
-        customerId: "${customerId}"
-  edges:
-    - from: createOrder
-      to: reserveInventory
-    - from: createOrder  
-      to: checkRisk        # 并发分支
-    - from: reserveInventory
-      to: processPayment
-    - from: checkRisk
-      to: processPayment   # 汇聚点
+    input:
+      orderId: "${orderResponse.orderId}"
+      items: "${items}"
 ```
 
-**DAG 校验规则**：
-- ✅ 无环检测（循环依赖）
-- ✅ 连通性验证（所有节点可达）
-- ✅ 变量流向分析（确保变量在使用前已定义）
-- ✅ 因果关系校验（三种模式）
-
-**因果校验模式**：
-- `strict`: 基于OTLP parent-child span关系的严格验证
-- `temporal`: 基于时间戳的时序验证（默认）
-- `off`: 关闭因果检查，仅做宽松匹配
-
-## 🔧 CI/CD 集成
-
-### GitHub Actions 自动化
-项目内置完整的CI/CD流水线，支持M4企业级质量门禁：
-
+### ServiceSpec Format
 ```yaml
-# 自动执行的验证流程
-✅ 代码质量检查 (lint + test)
-✅ 多格式报告生成 (JSON + JUnit + HTML)  
-✅ DAG格式验证 (成功/失败场景)
-✅ 基线门控检查 (90% + 95% 阈值)
-✅ 因果关系验证 (三种模式)
-✅ 企业功能测试 (OTLP + PII)
+service: "OrderService"
+version: "1.0.0"
+operations:
+  - operationId: "createOrder"
+    description: "Create a new order"
+    preconditions:
+      "validCustomer": "has(input.customerId) && input.customerId != ''"
+      "hasItems": "size(input.items) > 0"
+    postconditions:
+      "orderCreated": "has(response.body.orderId)"
+      "statusOk": "response.status == 200"
 ```
 
-### 质量门禁配置
-PR会自动触发严格的质量检查：
+## 🎯 Examples
 
+The project includes a complete "Order-Inventory-Fulfillment" e-commerce flow example:
+
+- `examples/flows/order-fulfillment.flowspec.yaml` - Main flow specification
+- `examples/services/` - Service contract specifications
+- `examples/traces/` - Success and failure scenario trace data
+
+Try the examples:
 ```bash
-# 质量门禁标准
-Step Coverage:    ≥ 90%    # 步骤覆盖率
-Condition Pass:   ≥ 95%    # 条件通过率  
-Semantic Check:   启用      # 语义校验
-Exit Codes:       0=pass, 3=validation-fail, 4=gate-fail
+# Clone the repository
+git clone https://github.com/choreoatlas2025/cli.git
+cd cli
+
+# Run the example
+choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
+choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
 ```
 
-### 报告产物上传
-每次CI运行都会生成并上传：
-- `report.html` - 离线可用的企业级HTML报告
-- `report.junit.xml` - JUnit格式，CI工具可直接解析  
-- `report.json` - 结构化JSON数据，便于后续处理
-- `baseline.json` - 基线数据，用于质量对比
-- `quality-gate-report.html` - 质量门禁详细报告
+## 🔧 CI/CD Integration
 
-### 本地CI测试
+### GitHub Actions
+```yaml
+- name: Validate Service Choreography
+  run: |
+    choreoatlas ci-gate \
+      --flow specs/main-flow.flowspec.yaml \
+      --trace traces/integration-test.trace.json
+```
+
+### Exit Codes
+- `0`: All validations passed
+- `1`: General CLI error
+- `2`: File not found or parsing error
+- `3`: Validation failed (spec vs trace mismatch)
+
+### Report Formats
+- **JSON**: Structured data for programmatic processing
+- **JUnit XML**: Direct CI/CD integration
+- **HTML**: Human-readable reports with timeline visualization
+
+## 🏗️ Development
+
+### Building from Source
+
 ```bash
-# 模拟CI环境测试
+# Install dependencies
+go mod download
+
+# Build
 make build
-make test  
-make lint
 
-# 测试质量门禁
-./bin/flowspec baseline record --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --out local-baseline.json
-./bin/flowspec validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --baseline local-baseline.json --threshold-steps 0.9 --threshold-conds 0.95
-```
-
-## 开发
-
-```bash
-# 代码格式化和检查
-make lint
-
-# 运行测试
+# Run tests
 make test
 
-# 清理构建产物
+# Run linting
+make lint
+
+# Clean build artifacts
 make clean
 ```
 
-## 架构
+### Project Structure
+```
+.
+├── cmd/choreoatlas/          # CLI entry point
+├── internal/
+│   ├── cli/                  # Command line processing
+│   ├── spec/                 # Specification loading and parsing
+│   ├── validate/             # Static and dynamic validation logic
+│   ├── trace/                # Trace data processing
+│   └── report/               # Report generation
+├── examples/                 # Example files
+│   ├── flows/               # FlowSpec examples
+│   ├── services/            # ServiceSpec examples
+│   └── traces/              # Trace data examples
+└── schemas/                 # JSON Schema definitions
+```
 
-- `cmd/flowspec/` - CLI 入口点
-- `internal/cli/` - 命令行处理逻辑
-- `internal/spec/` - 规约加载和解析
-- `internal/validate/` - 静态和动态验证逻辑，包含因果校验
-- `internal/trace/` - 追踪数据处理，支持 OTLP JSON 格式
-- `internal/mask/` - PII 脱敏策略引擎
-- `internal/edition/` - 版本特性管理
-- `policies/` - 脱敏策略配置文件
+## 📦 Edition Features
 
-## 版本支持
+| Edition | Features |
+|---------|----------|
+| **Community Edition** | Basic Lint + File-based Validate |
+| **Pro-Free** | + OTLP Collection |
+| **Pro-Privacy** | + PII Masking |
+| **Cloud** | + Remote Storage & Collaboration |
 
-| 版本 | 特性 |
-|------|------|
-| CE | 基础 Lint + 文件 Validate |
-| Pro-Free | + OTLP 采集 |
-| Pro-Privacy | + PII 脱敏 |
-| Cloud | + 远端存储协作 |
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+Apache 2.0 - see [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- **Documentation**: https://choreoatlas.io (Coming Soon)
+- **GitHub**: https://github.com/choreoatlas2025/cli
+- **Docker**: https://github.com/choreoatlas2025/cli/pkgs/container/cli
+- **Issues**: https://github.com/choreoatlas2025/cli/issues
+- **Discussions**: https://github.com/choreoatlas2025/cli/discussions
+
+---
+
+*ChoreoAtlas CLI - Map, Verify, and Steer your service choreography with Contract-as-Code*

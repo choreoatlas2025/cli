@@ -1,4 +1,4 @@
-name: FlowSpec CLI - M4 Enterprise CI
+name: ChoreoAtlas CLI - CI
 
 on:
   push:
@@ -14,9 +14,9 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.24'
     
     - name: Install dependencies
       run: make deps
@@ -33,227 +33,34 @@ jobs:
     - name: Run example validation
       run: make run-example
 
-  # M4 Enterprise Feature Validation
-  m4-validation:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-    
-    - name: Build FlowSpec CLI
-      run: make build
-    
-    # Legacy Flow Format Validation with All Report Types
-    - name: Generate All Report Formats (Legacy Flow)
-      run: |
-        echo "📊 Generating comprehensive reports for legacy flow format..."
-        
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --report-format json --report-out report.json \
-          --semantic=false
-        
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --report-format junit --report-out report.junit.xml \
-          --semantic=false
-        
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --report-format html --report-out report.html \
-          --semantic=false
-    
-    # DAG Format Validation - Success Case
-    - name: Validate DAG Format - Success Case  
-      run: |
-        echo "✅ Validating DAG format with temporal causality..."
-        ./bin/flowspec lint --flow examples/flows/order-fulfillment-dag.flowspec.yaml
-        
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment-dag.flowspec.yaml \
-          --trace examples/traces/dag-order-trace.json \
-          --causality temporal \
-          --report-format json --report-out dag-success.json \
-          --report-format junit --report-out dag-success.junit.xml \
-          --report-format html --report-out dag-success.html \
-          --semantic=false
-    
-    # DAG Format Validation - Failure Case (Strict Causality)
-    - name: Validate DAG Format - Strict Causality (Expected Failure)
-      continue-on-error: true
-      run: |
-        echo "❌ Testing DAG with strict causality (expected to fail)..."
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment-dag.flowspec.yaml \
-          --trace examples/traces/dag-order-trace.json \
-          --causality strict \
-          --report-format json --report-out dag-fail.json \
-          --report-format junit --report-out dag-fail.junit.xml \
-          --report-format html --report-out dag-fail.html \
-          --semantic=false || echo "✓ Expected failure in strict mode (no parent-child spans)"
-
-    # Baseline Gate System Testing
-    - name: Test Baseline Gate System
-      run: |
-        echo "🛡️ Testing M4 Baseline Gate System..."
-        
-        # Record baseline
-        ./bin/flowspec baseline record \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --out baseline.json
-        
-        echo "Baseline recorded:"
-        cat baseline.json | jq '{flowId, stepsTotal, coveredSteps: (.coveredSteps | length)}'
-        
-        # Test with M4 default thresholds (should pass)
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --baseline baseline.json \
-          --threshold-steps 0.9 \
-          --threshold-conds 0.95 \
-          --report-format html --report-out baseline-gate.html \
-          --semantic=false
-    
-    # Test Baseline Gate Failure
-    - name: Test Baseline Gate Failure (High Thresholds)
-      continue-on-error: true
-      run: |
-        echo "🚫 Testing baseline gate with unrealistic thresholds..."
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --baseline baseline.json \
-          --threshold-steps 0.99 \
-          --threshold-conds 0.99 \
-          --semantic=false && exit 1 || echo "✓ Gate correctly failed with high thresholds"
-
-    # Upload M4 Reports
-    - name: Upload M4 Enterprise Reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: m4-enterprise-reports
-        path: |
-          report.json
-          report.junit.xml
-          report.html
-          dag-*.json
-          dag-*.xml
-          dag-*.html
-          baseline*.json
-          baseline*.html
-        retention-days: 30
-    
-    - name: M4 Validation Summary
-      run: |
-        echo "📋 FlowSpec M4 Enterprise Validation Summary"
-        echo "============================================="
-        echo "✅ HTML Report Generation: PASSED"
-        echo "✅ JSON Report Generation: PASSED"
-        echo "✅ JUnit Report Generation: PASSED" 
-        echo "✅ DAG Format Validation: PASSED"
-        echo "✅ Baseline Gate System: PASSED"
-        echo "✅ Causality Checking: PASSED"
-        echo ""
-        echo "Generated report files:"
-        ls -la *.json *.xml *.html 2>/dev/null | head -10
-        echo ""
-        echo "🚀 M4 Enterprise features validation complete!"
-
-  # Quality Gate - Enforces M4 baseline standards for PRs
-  quality-gate:
-    runs-on: ubuntu-latest
-    needs: [test, m4-validation]
-    if: github.event_name == 'pull_request'
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-    
-    - name: Build FlowSpec CLI
-      run: make build
-    
-    - name: 🚧 Quality Gate - M4 Baseline Standards
-      run: |
-        echo "🚧 QUALITY GATE: Enforcing M4 Enterprise Standards"
-        echo "=================================================="
-        echo "⚡ Step Coverage Threshold: ≥ 90%"
-        echo "⚡ Condition Pass Rate: ≥ 95%"
-        echo "⚡ Semantic Validation: ENABLED"
-        echo ""
-        
-        # Record baseline from current state
-        ./bin/flowspec baseline record \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --out pr-gate-baseline.json
-        
-        # Enforce M4 quality standards with semantic validation
-        ./bin/flowspec validate \
-          --flow examples/flows/order-fulfillment.flowspec.yaml \
-          --trace examples/traces/successful-order.trace.json \
-          --baseline pr-gate-baseline.json \
-          --threshold-steps 0.9 \
-          --threshold-conds 0.95 \
-          --semantic=true \
-          --report-format html --report-out quality-gate-report.html
-        
-        echo ""
-        echo "✅ QUALITY GATE PASSED!"
-        echo "   ✓ All M4 enterprise standards met"
-        echo "   ✓ Code ready for production deployment"
-    
-    - name: Upload Quality Gate Report
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: quality-gate-report
-        path: |
-          quality-gate-report.html
-          pr-gate-baseline.json
-        retention-days: 7
-
   build:
     runs-on: ubuntu-latest
-    needs: [test, m4-validation]
+    needs: test
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.24'
     
     - name: Build for multiple platforms
       run: |
         # Linux AMD64
-        GOOS=linux GOARCH=amd64 go build -o bin/flowspec-linux-amd64 ./cmd/flowspec
+        GOOS=linux GOARCH=amd64 go build -o bin/choreoatlas-linux-amd64 ./cmd/choreoatlas
         # Linux ARM64
-        GOOS=linux GOARCH=arm64 go build -o bin/flowspec-linux-arm64 ./cmd/flowspec
+        GOOS=linux GOARCH=arm64 go build -o bin/choreoatlas-linux-arm64 ./cmd/choreoatlas
         # macOS AMD64
-        GOOS=darwin GOARCH=amd64 go build -o bin/flowspec-darwin-amd64 ./cmd/flowspec
+        GOOS=darwin GOARCH=amd64 go build -o bin/choreoatlas-darwin-amd64 ./cmd/choreoatlas
         # macOS ARM64 (M1/M2)
-        GOOS=darwin GOARCH=arm64 go build -o bin/flowspec-darwin-arm64 ./cmd/flowspec
+        GOOS=darwin GOARCH=arm64 go build -o bin/choreoatlas-darwin-arm64 ./cmd/choreoatlas
         # Windows AMD64
-        GOOS=windows GOARCH=amd64 go build -o bin/flowspec-windows-amd64.exe ./cmd/flowspec
+        GOOS=windows GOARCH=amd64 go build -o bin/choreoatlas-windows-amd64.exe ./cmd/choreoatlas
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: flowspec-binaries
+        name: choreoatlas-binaries
         path: bin/
