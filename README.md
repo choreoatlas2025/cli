@@ -10,6 +10,10 @@ ChoreoAtlas is a Contract-as-Code platform for interactive logic governance, fol
 
 #### Docker (Recommended)
 ```bash
+# Public access via Docker Hub
+docker run --rm choreoatlas2025/cli:latest --help
+
+# Or via GitHub Container Registry (requires authentication)
 docker run --rm ghcr.io/choreoatlas2025/cli:latest --help
 ```
 
@@ -44,11 +48,11 @@ choreoatlas ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trac
 ### Docker Usage Examples
 
 ```bash
-# Mount examples directory and run validation
-docker run --rm -v $(pwd)/examples:/examples ghcr.io/choreoatlas2025/cli:latest lint --flow /examples/flows/order-fulfillment.flowspec.yaml
+# Mount examples directory and run validation (using Docker Hub)
+docker run --rm -v $(pwd)/examples:/examples choreoatlas2025/cli:latest lint --flow /examples/flows/order-fulfillment.flowspec.yaml
 
-# Generate HTML report
-docker run --rm -v $(pwd):/workspace ghcr.io/choreoatlas2025/cli:latest validate \
+# Generate HTML report (using Docker Hub)
+docker run --rm -v $(pwd):/workspace choreoatlas2025/cli:latest validate \
   --flow /workspace/examples/flows/order-fulfillment.flowspec.yaml \
   --trace /workspace/examples/traces/successful-order.trace.json \
   --report-format html --report-out /workspace/report.html

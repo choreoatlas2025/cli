@@ -62,6 +62,7 @@ changelog:
 
 # Docker镜像
 dockers:
+  # GHCR (GitHub Container Registry) - 私有访问
   - image_templates:
       - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-amd64"
       - "ghcr.io/choreoatlas2025/cli:latest-amd64"
@@ -96,7 +97,43 @@ dockers:
     ids:
       - ce
 
+  # Docker Hub - 公开访问
+  - image_templates:
+      - "choreoatlas2025/cli:{{ .Version }}-amd64"
+      - "choreoatlas2025/cli:latest-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    extra_files:
+      - examples
+    ids:
+      - ce
+
+  - image_templates:
+      - "choreoatlas2025/cli:{{ .Version }}-arm64"
+      - "choreoatlas2025/cli:latest-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    extra_files:
+      - examples
+    ids:
+      - ce
+
 docker_manifests:
+  # GHCR manifests
   - name_template: "ghcr.io/choreoatlas2025/cli:{{ .Version }}"
     image_templates:
       - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-amd64"
@@ -105,6 +142,16 @@ docker_manifests:
     image_templates:
       - "ghcr.io/choreoatlas2025/cli:latest-amd64"
       - "ghcr.io/choreoatlas2025/cli:latest-arm64"
+  
+  # Docker Hub manifests (公开访问)
+  - name_template: "choreoatlas2025/cli:{{ .Version }}"
+    image_templates:
+      - "choreoatlas2025/cli:{{ .Version }}-amd64"
+      - "choreoatlas2025/cli:{{ .Version }}-arm64"
+  - name_template: "choreoatlas2025/cli:latest"
+    image_templates:
+      - "choreoatlas2025/cli:latest-amd64"
+      - "choreoatlas2025/cli:latest-arm64"
 
 # SBOM生成（暂时禁用，因为syft工具未安装）
 # sboms:
