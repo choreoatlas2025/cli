@@ -1,0 +1,29 @@
+# Dockerfile for GoReleaser - uses pre-built binary
+FROM gcr.io/distroless/static:nonroot
+
+# Copy ca-certificates 
+COPY --from=gcr.io/distroless/static:nonroot /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy the pre-built binary from GoReleaser context
+COPY choreoatlas /usr/local/bin/choreoatlas
+
+# Copy examples for demonstration
+COPY examples /examples
+
+# Use non-root user
+USER nonroot:nonroot
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/choreoatlas"]
+
+# Default command
+CMD ["--help"]
+
+# Labels (will be overridden by GoReleaser with dynamic values)
+LABEL org.opencontainers.image.title="ChoreoAtlas CLI"
+LABEL org.opencontainers.image.description="从真实追踪中映射-验证-引导跨服务编排的契约即代码工具"
+LABEL org.opencontainers.image.source="https://github.com/choreoatlas2025/cli"
+LABEL org.opencontainers.image.url="https://choreoatlas.io"
+LABEL org.opencontainers.image.documentation="https://choreoatlas.io"
+LABEL org.opencontainers.image.vendor="ChoreoAtlas"
+LABEL org.opencontainers.image.licenses="Apache-2.0"

@@ -65,7 +65,7 @@ dockers:
   - image_templates:
       - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-amd64"
       - "ghcr.io/choreoatlas2025/cli:latest-amd64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/amd64"
@@ -74,13 +74,15 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    extra_files:
+      - examples
     ids:
       - ce
 
   - image_templates:
       - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-arm64"
       - "ghcr.io/choreoatlas2025/cli:latest-arm64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
       - "--platform=linux/arm64"
@@ -89,6 +91,8 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    extra_files:
+      - examples
     ids:
       - ce
 
