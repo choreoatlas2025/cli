@@ -102,11 +102,11 @@ docker_manifests:
       - "ghcr.io/choreoatlas2025/cli:latest-amd64"
       - "ghcr.io/choreoatlas2025/cli:latest-arm64"
 
-# SBOM生成
-sboms:
-  - artifacts: archive
-    documents:
-      - "{{ .ProjectName }}-{{ .Version }}-sbom.spdx.json"
+# SBOM生成（暂时禁用，因为syft工具未安装）
+# sboms:
+#   - artifacts: archive
+#     documents:
+#       - "{{ .ProjectName }}-{{ .Version }}-sbom.spdx.json"
 
 # 发布设置
 release:
