@@ -99,8 +99,8 @@ dockers:
 
   # Docker Hub - 公开访问
   - image_templates:
-      - "choreoatlas2025/cli:{{ .Version }}-amd64"
-      - "choreoatlas2025/cli:latest-amd64"
+      - "choreoatlas/cli:{{ .Version }}-amd64"
+      - "choreoatlas/cli:latest-amd64"
     dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
@@ -116,8 +116,8 @@ dockers:
       - ce
 
   - image_templates:
-      - "choreoatlas2025/cli:{{ .Version }}-arm64"
-      - "choreoatlas2025/cli:latest-arm64"
+      - "choreoatlas/cli:{{ .Version }}-arm64"
+      - "choreoatlas/cli:latest-arm64"
     dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
@@ -144,14 +144,14 @@ docker_manifests:
       - "ghcr.io/choreoatlas2025/cli:latest-arm64"
   
   # Docker Hub manifests (公开访问)
-  - name_template: "choreoatlas2025/cli:{{ .Version }}"
+  - name_template: "choreoatlas/cli:{{ .Version }}"
     image_templates:
-      - "choreoatlas2025/cli:{{ .Version }}-amd64"
-      - "choreoatlas2025/cli:{{ .Version }}-arm64"
-  - name_template: "choreoatlas2025/cli:latest"
+      - "choreoatlas/cli:{{ .Version }}-amd64"
+      - "choreoatlas/cli:{{ .Version }}-arm64"
+  - name_template: "choreoatlas/cli:latest"
     image_templates:
-      - "choreoatlas2025/cli:latest-amd64"
-      - "choreoatlas2025/cli:latest-arm64"
+      - "choreoatlas/cli:latest-amd64"
+      - "choreoatlas/cli:latest-arm64"
 
 # SBOM生成（暂时禁用，因为syft工具未安装）
 # sboms:
