@@ -1,0 +1,9 @@
+service: "Payment Service"
+
+operations:
+  - operationId: processPayment
+    description: "处理支付"
+    postconditions:
+      支付成功: 'response.body.status == "success"'
+      返回支付ID: 'has(response.body.paymentId)'
+      返回交易ID: 'has(response.body.transactionId)'

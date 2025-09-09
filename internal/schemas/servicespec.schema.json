@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/servicespec.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["service", "operations"],
+  "properties": {
+    "service": { "type": "string", "minLength": 1 },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "preconditions": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "postconditions": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

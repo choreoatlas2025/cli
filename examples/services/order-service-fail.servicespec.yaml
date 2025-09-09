@@ -1,0 +1,9 @@
+service: "orderService"
+operations:
+  - operationId: "createOrder"
+    description: "创建新订单"
+    preconditions: {}
+    postconditions:
+      "订单创建失败测试": "response.status == 418"  # 故意错误的状态码
+      "返回订单ID": "response.body.orderId != ''"
+      "返回客户ID": "response.body.customerId != ''"

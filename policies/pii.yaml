@@ -1,0 +1,63 @@
+version: 1
+
+globals:
+  strategies:
+    email: { type: "keep-prefix", prefixLen: 2, mask: "*" }
+    phone: { type: "redact" }
+    id:    { type: "hash", algo: "sha256", salt: "tenant-xyz" }
+    secret: { type: "redact" }
+    card:  { type: "keep-prefix", prefixLen: 4, mask: "*" }
+
+rules:
+  # 订单服务 PII 脱敏
+  - match:
+      service: "orderService"
+      operation: "createOrder"
+      paths:
+        - "response.body.customerId"
+        - "response.body.customerEmail" 
+    strategy: "id"
+
+  - match:
+      service: "orderService"
+      paths:
+        - "response.body.customer.email"
+    strategy: "email"
+
+  # 全局正则匹配规则
+  - match:
+      regexKeys: ["(?i)email"]
+    strategy: "email"
+
+  - match:
+      regexKeys: ["(?i)phone", "(?i)mobile", "(?i)tel"]
+    strategy: "phone"
+
+  - match:
+      regexKeys: ["(?i)password", "(?i)secret", "(?i)token", "(?i)key", "(?i)auth"]
+    strategy: "secret"
+
+  - match:
+      regexKeys: ["(?i).*id$", "(?i)customer.*", "(?i)user.*"]
+    strategy: "id"
+
+  # 信用卡号脱敏
+  - match:
+      regexKeys: ["(?i)card", "(?i)credit"]
+    strategy: "card"
+
+  # 地址信息部分脱敏
+  - match:
+      regexKeys: ["(?i)address", "(?i)location"]
+    strategy:
+      type: "keep-prefix"
+      prefixLen: 10
+      mask: "*"
+
+  # 预留：标签匹配（将来从 ServiceSpec 标注导出）
+  - match:
+      tag: "pii"
+    strategy:
+      type: "tokenize"
+      tokenPrefix: "pii_"
+      salt: "global-salt"

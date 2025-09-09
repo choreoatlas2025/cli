@@ -1,0 +1,69 @@
+{
+  "spans": [
+    {
+      "name": "createOrder",
+      "service": "orderService",
+      "startNanos": 1693910000000000000,
+      "endNanos": 1693910000100000000,
+      "attributes": {
+        "http.status_code": 201,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "customerId": "CUST-12345",
+          "customerEmail": "john.doe@example.com",
+          "totalAmount": 199.99,
+          "customer": {
+            "id": "CUST-12345", 
+            "email": "john.doe@example.com",
+            "phone": "+1-555-123-4567",
+            "address": "123 Main Street, Anytown, CA 90210"
+          },
+          "payment": {
+            "cardNumber": "4532-1234-5678-9012",
+            "authToken": "auth_secret_abc123xyz"
+          },
+          "metadata": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "sessionId": "sess_789xyz456",
+            "password": "user_secret_password"
+          }
+        }
+      }
+    },
+    {
+      "name": "reserveInventory",
+      "service": "inventoryService", 
+      "startNanos": 1693910000150000000,
+      "endNanos": 1693910000250000000,
+      "attributes": {
+        "http.status_code": 200,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "customerId": "CUST-12345",
+          "reservedItems": [
+            {"productId": "PROD-001", "quantity": 2},
+            {"productId": "PROD-002", "quantity": 1}
+          ],
+          "internalKey": "internal_secret_key_456"
+        }
+      }
+    },
+    {
+      "name": "createShipment",
+      "service": "shippingService",
+      "startNanos": 1693910000300000000,
+      "endNanos": 1693910000400000000,
+      "attributes": {
+        "http.status_code": 201,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "shipmentId": "SHIP-2023-001",
+          "customerId": "CUST-12345",
+          "estimatedDelivery": "2023-09-10",
+          "shippingAddress": "123 Main Street, Anytown, CA 90210",
+          "customerPhone": "+1-555-987-6543"
+        }
+      }
+    }
+  ]
+}

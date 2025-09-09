@@ -1,0 +1,6 @@
+service: inventoryService
+operations:
+    - operationId: reserveInventory
+      description: 从追踪自动生成的 reserveInventory 操作
+      postconditions:
+        resp_status_code: response.status == 200

@@ -1,0 +1,6 @@
+service: orderService
+operations:
+    - operationId: createOrder
+      description: 从追踪自动生成的 createOrder 操作
+      postconditions:
+        resp_status_code: response.status == 201

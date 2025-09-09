@@ -1,0 +1,69 @@
+info:
+  title: "E-commerce Order Fulfillment Flow: DAG Format"
+
+services:
+  orderService:
+    spec: "../services/order-service.servicespec.yaml"
+  inventoryService:
+    spec: "../services/inventory-service.servicespec.yaml"
+  shippingService:
+    spec: "../services/shipping-service.servicespec.yaml"
+  riskService:
+    spec: "../services/risk-service.servicespec.yaml"
+  paymentService:
+    spec: "../services/payment-service.servicespec.yaml"
+
+graph:
+  nodes:
+    - id: createOrder
+      call: orderService.createOrder
+      input:
+        customerId: "${customerId}"
+        orderItems: "${orderItems}"
+        totalAmount: "${totalAmount}"
+      output:
+        orderResponse: response.body
+    - id: reserveInventory
+      call: inventoryService.reserveInventory
+      input:
+        orderId: "${orderResponse.orderId}"
+        items: "${orderResponse.items}"
+      output:
+        reservationResponse: response.body
+    - id: checkRisk
+      call: riskService.check
+      input:
+        customerId: "${customerId}"
+        orderAmount: "${totalAmount}"
+        orderId: "${orderResponse.orderId}"
+      output:
+        riskResponse: response.body
+    - id: processPayment
+      call: paymentService.processPayment
+      input:
+        orderId: "${orderResponse.orderId}"
+        amount: "${totalAmount}"
+        customerId: "${customerId}"
+        riskScore: "${riskResponse.riskScore}"
+      output:
+        paymentResponse: response.body
+    - id: createShipment
+      call: shippingService.createShipment
+      input:
+        orderId: "${orderResponse.orderId}"
+        customerId: "${customerId}"
+        items: "${reservationResponse.reservedItems}"
+        paymentId: "${paymentResponse.paymentId}"
+      output:
+        shipmentResponse: response.body
+  edges:
+    - from: createOrder
+      to: reserveInventory
+    - from: createOrder
+      to: checkRisk
+    - from: reserveInventory
+      to: processPayment
+    - from: checkRisk
+      to: processPayment
+    - from: processPayment
+      to: createShipment

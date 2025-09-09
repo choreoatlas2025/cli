@@ -1,0 +1,52 @@
+{
+  "spans": [
+    {
+      "service": "orderService",
+      "name": "createOrder", 
+      "startNanos": 1000000000,
+      "endNanos": 1100000000,
+      "attributes": {
+        "http.method": "POST",
+        "http.url": "/orders",
+        "http.status_code": "200"
+      }
+    },
+    {
+      "service": "inventoryService",
+      "name": "reserveInventory",
+      "startNanos": 1200000000,
+      "endNanos": 1300000000,
+      "attributes": {
+        "http.method": "POST",
+        "http.status_code": "200"
+      }
+    },
+    {
+      "service": "riskService", 
+      "name": "check",
+      "startNanos": 1200000000,
+      "endNanos": 1250000000,
+      "attributes": {
+        "http.status_code": "200"
+      }
+    },
+    {
+      "service": "paymentService",
+      "name": "processPayment",
+      "startNanos": 1400000000,
+      "endNanos": 1500000000,
+      "attributes": {
+        "http.status_code": "200"
+      }
+    },
+    {
+      "service": "shippingService",
+      "name": "createShipment",
+      "startNanos": 1600000000,
+      "endNanos": 1700000000,
+      "attributes": {
+        "http.status_code": "200"
+      }
+    }
+  ]
+}

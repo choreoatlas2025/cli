@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/flowspec.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["info", "services"],
+  "properties": {
+    "info": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": { 
+        "title": { "type": "string", "minLength": 1 } 
+      }
+    },
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["spec"],
+        "additionalProperties": false,
+        "properties": { 
+          "spec": { "type": "string", "minLength": 1 } 
+        }
+      }
+    },
+    "flow": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "call"],
+        "properties": {
+          "step": { "type": "string", "minLength": 1 },
+          "call": { "type": "string", "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$" },
+          "input": {},
+          "output": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "meta": { "type": "object" }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "call"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "call": { "type": "string", "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$" },
+              "input": {},
+              "output": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "meta": { "type": "object" }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "type": "string", "minLength": 1 },
+              "to": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["flow"], "not": { "required": ["graph"] } },
+    { "required": ["graph"], "not": { "required": ["flow"] } }
+  ]
+}

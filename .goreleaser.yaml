@@ -1,0 +1,151 @@
+# GoReleaser配置 - ChoreoAtlas CLI CE版本发布
+version: 2
+
+project_name: choreoatlas
+
+env:
+  - CGO_ENABLED=0
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # 只构建CE版本
+  - id: ce
+    main: ./cmd/choreoatlas
+    binary: choreoatlas
+    ldflags:
+      - -s -w
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.Version={{.Version}}'
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.GitCommit={{.ShortCommit}}'
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.BuildTime={{.Date}}'
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce'
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: ce-archive
+    builds:
+      - ce
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - examples/**/*
+    wrap_in_directory: false
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+# Docker镜像
+dockers:
+  - image_templates:
+      - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-amd64"
+      - "ghcr.io/choreoatlas2025/cli:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    ids:
+      - ce
+
+  - image_templates:
+      - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-arm64"
+      - "ghcr.io/choreoatlas2025/cli:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source=https://github.com/choreoatlas2025/cli"
+    ids:
+      - ce
+
+docker_manifests:
+  - name_template: "ghcr.io/choreoatlas2025/cli:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-amd64"
+      - "ghcr.io/choreoatlas2025/cli:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/choreoatlas2025/cli:latest"
+    image_templates:
+      - "ghcr.io/choreoatlas2025/cli:latest-amd64"
+      - "ghcr.io/choreoatlas2025/cli:latest-arm64"
+
+# SBOM生成
+sboms:
+  - artifacts: archive
+    documents:
+      - "{{ .ProjectName }}-{{ .Version }}-sbom.spdx.json"
+
+# 发布设置
+release:
+  github:
+    owner: choreoatlas2025
+    name: cli
+  draft: false
+  prerelease: auto
+  name_template: "ChoreoAtlas CLI {{ .Version }}"
+  header: |
+    ## ChoreoAtlas CLI {{ .Version }}
+    
+    从真实追踪中"映射-验证-引导"跨服务编排，用可执行契约治理交互逻辑。
+    
+    ### 快速开始
+    ```bash
+    # Homebrew
+    brew tap choreoatlas2025/tap
+    brew install choreoatlas
+    
+    # Docker
+    docker run --rm ghcr.io/choreoatlas2025/cli:{{ .Version }} version
+    
+    # 手动下载
+    # 下载对应平台的二进制文件并添加到PATH
+    ```
+    
+    ### 10分钟体验
+    ```bash
+    choreoatlas --help
+    # 查看examples/目录了解FlowSpec和ServiceSpec契约
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/choreoatlas2025/cli/compare/{{ .PreviousTag }}...{{ .Tag }}
+    
+    ---
+    
+    🚀 **Quick Start**: https://choreoatlas.io/quickstart  
+    💬 **Community**: https://github.com/choreoatlas2025/cli/discussions  
+    📚 **Docs**: https://choreoatlas.io
+    
+    **ChoreoAtlas CLI Community Edition** - Apache 2.0 开源许可

@@ -1,0 +1,8 @@
+service: "riskService"
+operations:
+  - operationId: "check"
+    description: "风控检查"
+    preconditions: {}
+    postconditions:
+      "风控检查成功": "response.status == 200"
+      "返回风控等级": "response.body.riskLevel != ''"

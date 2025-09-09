@@ -1,0 +1,48 @@
+{
+  "spans": [
+    {
+      "name": "createOrder",
+      "service": "orderService",
+      "startNanos": 1693910000000000000,
+      "endNanos": 1693910000100000000,
+      "attributes": {
+        "http.status_code": 201,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "customerId": "CUST-001",
+          "totalAmount": 199.99
+        }
+      }
+    },
+    {
+      "name": "reserveInventory",
+      "service": "inventoryService",
+      "startNanos": 1693910000150000000,
+      "endNanos": 1693910000250000000,
+      "attributes": {
+        "http.status_code": 200,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "reservedItems": [
+            {"productId": "PROD-001", "quantity": 2},
+            {"productId": "PROD-002", "quantity": 1}
+          ]
+        }
+      }
+    },
+    {
+      "name": "createShipment",
+      "service": "shippingService",
+      "startNanos": 1693910000300000000,
+      "endNanos": 1693910000400000000,
+      "attributes": {
+        "http.status_code": 201,
+        "response.body": {
+          "orderId": "ORD-2023-001",
+          "shipmentId": "SHIP-2023-001",
+          "estimatedDelivery": "2023-09-10"
+        }
+      }
+    }
+  ]
+}

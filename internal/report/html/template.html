@@ -1,0 +1,397 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>FlowSpec Validation Report</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    margin: 16px;
+    background-color: #f8f9fa;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 24px;
+  }
+  .header {
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+  .subtitle {
+    color: #6c757d;
+    margin: 4px 0 0 0;
+  }
+  .edition-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+  }
+  .edition-badge.ce {
+    background: linear-gradient(135deg, #059669, #10b981);
+  }
+  .edition-badge.pro {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+  }
+  .edition-badge.pro-privacy {
+    background: linear-gradient(135deg, #7c2d12, #ea580c);
+  }
+  .edition-badge.cloud {
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  }
+  .gate-alert {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-weight: 500;
+  }
+  .gate-pass {
+    background-color: #d1e7dd;
+    border: 1px solid #badbcc;
+    color: #0f5132;
+  }
+  .gate-fail {
+    background-color: #f8d7da;
+    border: 1px solid #f5c2c7;
+    color: #842029;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+  }
+  .summary-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .summary-card .value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #212529;
+  }
+  .summary-card .subvalue {
+    font-size: 14px;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+  .badge {
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+  .pass { background: #d1e7dd; color: #0f5132; }
+  .fail { background: #f8d7da; color: #842029; }
+  .skip { background: #cff4fc; color: #055160; }
+  
+  .section {
+    margin-bottom: 32px;
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #212529;
+  }
+  
+  .gantt {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+  .gantt-row {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    min-height: 20px;
+  }
+  .gantt-label {
+    width: 200px;
+    font-size: 12px;
+    color: #495057;
+    flex-shrink: 0;
+  }
+  .gantt-track {
+    flex: 1;
+    position: relative;
+    height: 14px;
+    margin-left: 12px;
+  }
+  .gantt-bar {
+    position: absolute;
+    height: 12px;
+    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+  }
+  th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    font-size: 14px;
+  }
+  tr:hover {
+    background-color: #f8f9fa;
+  }
+  .conditions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .step-number {
+    color: #6c757d;
+    font-weight: 500;
+  }
+  .call-name {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: #495057;
+  }
+  .message {
+    color: #842029;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1 class="title">FlowSpec Validation Report</h1>
+    <div class="subtitle" id="generation-time"></div>
+    <div class="edition-badge" id="edition-badge"></div>
+  </div>
+  
+  <div id="gate-status"></div>
+  
+  <div class="summary" id="summary"></div>
+  
+  <div class="section">
+    <h2 class="section-title">Timeline</h2>
+    <div class="gantt" id="gantt">
+      <div style="color: #6c757d; font-size: 14px;">No timeline data available</div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">Step Details</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Step</th>
+          <th>Call</th>
+          <th>Status</th>
+          <th>Message</th>
+          <th>Conditions</th>
+        </tr>
+      </thead>
+      <tbody id="steps-tbody">
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const formatPercent = (value) => (value * 100).toFixed(1) + '%';
+const formatDuration = (nanos) => {
+  if (!nanos) return '0ms';
+  const ms = nanos / 1000000;
+  if (ms < 1000) return Math.round(ms) + 'ms';
+  return (ms / 1000).toFixed(1) + 's';
+};
+
+function renderSummary(data) {
+  const summary = data.summary || {};
+  const gateResult = data.gateResult || {};
+  
+  // Gate status
+  const gateDiv = document.getElementById('gate-status');
+  if (gateResult.checked) {
+    const passClass = gateResult.passed ? 'gate-pass' : 'gate-fail';
+    const passText = gateResult.passed ? '✓ Baseline Gate: PASSED' : '✗ Baseline Gate: FAILED';
+    const details = gateResult.details || {};
+    gateDiv.innerHTML = `
+      <div class="${passClass}">
+        ${passText}
+        ${!gateResult.passed ? `
+          <div style="margin-top: 8px; font-size: 14px;">
+            Steps Coverage: ${formatPercent(details.stepsCoverage || 0)} (required: ≥${formatPercent(details.stepsThreshold || 0.9)})<br>
+            Conditions Pass Rate: ${formatPercent(details.conditionsRate || 0)} (required: ≥${formatPercent(details.conditionsThreshold || 0.95)})
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+  
+  // Summary cards
+  const summaryEl = document.getElementById('summary');
+  summaryEl.innerHTML = `
+    <div class="summary-card">
+      <h3>Total Steps</h3>
+      <div class="value">${summary.stepsTotal || 0}</div>
+      <div class="subvalue">Executed</div>
+    </div>
+    <div class="summary-card">
+      <h3>Steps Coverage</h3>
+      <div class="value">${formatPercent(summary.stepsCoverage || 0)}</div>
+      <div class="subvalue">${summary.stepsPass || 0} / ${summary.stepsTotal || 0} passed</div>
+    </div>
+    <div class="summary-card">
+      <h3>Conditions</h3>
+      <div class="value">${formatPercent(summary.conditionsRate || 0)}</div>
+      <div class="subvalue">${summary.conditionsPass || 0} / ${(summary.conditionsPass || 0) + (summary.conditionsFail || 0)} passed</div>
+    </div>
+    <div class="summary-card">
+      <h3>Duration</h3>
+      <div class="value">${formatDuration(summary.durationNanos)}</div>
+      <div class="subvalue">Total execution time</div>
+    </div>
+  `;
+}
+
+function renderTimeline(spans) {
+  const ganttEl = document.getElementById('gantt');
+  
+  if (!spans || spans.length === 0) {
+    ganttEl.innerHTML = '<div style="color: #6c757d; font-size: 14px;">No timeline data available</div>';
+    return;
+  }
+  
+  const minStart = Math.min(...spans.map(s => s.startNanos || 0));
+  const maxEnd = Math.max(...spans.map(s => s.endNanos || s.startNanos || 0));
+  const totalDuration = maxEnd - minStart;
+  
+  if (totalDuration <= 0) {
+    ganttEl.innerHTML = '<div style="color: #6c757d; font-size: 14px;">Invalid timeline data</div>';
+    return;
+  }
+  
+  ganttEl.innerHTML = '';
+  
+  spans.forEach(span => {
+    const startPercent = ((span.startNanos - minStart) / totalDuration) * 100;
+    const duration = (span.endNanos || span.startNanos) - span.startNanos;
+    const widthPercent = Math.max((duration / totalDuration) * 100, 0.5); // Minimum 0.5% width
+    
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+    
+    row.innerHTML = `
+      <div class="gantt-label">${span.service || 'unknown'}.${span.name || 'unknown'}</div>
+      <div class="gantt-track">
+        <div class="gantt-bar" style="left: ${startPercent}%; width: ${widthPercent}%;" title="${span.service}.${span.name}: ${formatDuration(duration)}"></div>
+      </div>
+    `;
+    
+    ganttEl.appendChild(row);
+  });
+}
+
+function renderStepsTable(steps) {
+  const tbody = document.getElementById('steps-tbody');
+  tbody.innerHTML = '';
+  
+  (steps || []).forEach((step, index) => {
+    const statusClass = (step.status || '').toLowerCase();
+    const conditions = (step.conditions || []).map(condition => {
+      const condClass = (condition.status || '').toLowerCase();
+      return `<span class="badge ${condClass}">${condition.kind}:${condition.name}</span>`;
+    }).join(' ');
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="step-number">${index + 1}</td>
+      <td>${step.step || step.node || ''}</td>
+      <td class="call-name">${step.call || ''}</td>
+      <td><span class="badge ${statusClass}">${step.status || 'UNKNOWN'}</span></td>
+      <td class="message">${step.message || ''}</td>
+      <td><div class="conditions">${conditions}</div></td>
+    `;
+    
+    tbody.appendChild(row);
+  });
+}
+
+function init() {
+  const data = window.FLOWREPORT || {};
+  
+  // Set generation time
+  document.getElementById('generation-time').textContent = 
+    'Generated on ' + new Date().toLocaleString();
+  
+  // Set edition badge
+  const editionBadge = document.getElementById('edition-badge');
+  const edition = data.edition || 'Unknown';
+  editionBadge.textContent = edition;
+  
+  // Add appropriate CSS class for styling
+  const editionClass = edition.toLowerCase().replace(' ', '-');
+  editionBadge.classList.add(editionClass);
+  
+  renderSummary(data);
+  renderTimeline(data.spans);
+  renderStepsTable(data.steps);
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
