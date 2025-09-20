@@ -19,6 +19,7 @@ choreoatlas validate [options]
 | `--semantic` | bool | `true` | Enable semantic validation (CEL) |
 | `--causality` | string | `temporal` | Causality check mode: `strict`, `temporal`, or `off` |
 | `--baseline` | string | - | Path to baseline file for comparison |
+| `--baseline-missing` | string | `fail` | Strategy when baseline file is missing: `fail` or `treat-as-absolute` |
 | `--threshold-steps` | float | `0.9` | Step coverage threshold (0.0-1.0) |
 | `--threshold-conds` | float | `0.95` | Condition pass rate threshold (0.0-1.0) |
 | `--skip-as-fail` | bool | `false` | Treat SKIP conditions as FAIL |

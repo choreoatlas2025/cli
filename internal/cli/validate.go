@@ -26,6 +26,7 @@ func runValidate(args []string) {
 	thresholdConds := fs.Float64("threshold-conds", 0.95, "条件通过率阈值")
 	skipAsFail := fs.Bool("skip-as-fail", false, "将SKIP条件视为FAIL")
 	causalityMode := fs.String("causality", "temporal", "因果检查模式：strict|temporal|off（默认 temporal）")
+	baselineMissing := fs.String("baseline-missing", "fail", "基线缺失策略：fail|treat-as-absolute")
 	_ = fs.Parse(args)
 
 	// 输入参数验证
@@ -82,21 +83,32 @@ func runValidate(args []string) {
 
 	// 基线门控检查
 	var gateResult *baseline.GateResult
-	if *baselinePath != "" {
-		// Load baseline for comparison (optional for now)
-		_, err := baseline.LoadBaseline(*baselinePath)
+	var baselineData *baseline.BaselineData
+	baselineExpected := *baselinePath != ""
+
+	if baselineExpected {
+		// Load baseline for comparison
+		var err error
+		baselineData, err = baseline.LoadBaseline(*baselinePath)
 		if err != nil {
-			fmt.Printf("[WARN] 无法加载基线文件 %s: %v\n", *baselinePath, err)
+			// Handle baseline missing according to strategy
+			if *baselineMissing == "fail" {
+				exitErr(fmt.Errorf("基线文件加载失败 %s: %w", *baselinePath, err))
+			} else if *baselineMissing == "treat-as-absolute" {
+				fmt.Printf("[WARN] 基线文件不可用，回退到绝对阈值模式: %v\n", err)
+				baselineData = nil
+				baselineExpected = false
+			}
 		}
 	}
-	
-	// 执行阈值门控（无论是否有基线文件）
+
+	// 执行阈值门控（可能有基线文件）
 	thresholds := baseline.ThresholdConfig{
 		StepsThreshold:      *thresholdSteps,
 		ConditionsThreshold: *thresholdConds,
 		SkipAsFail:          *skipAsFail,
 	}
-	gateResult = baseline.EvaluateGate(results, thresholds, nil)
+	gateResult = baseline.EvaluateGate(results, thresholds, baselineData)
 
 	// 生成报告（如果指定了格式和路径）
 	if *reportFormat != "" && *reportOut != "" {
@@ -143,6 +155,8 @@ func runValidate(args []string) {
 		if gateResult.Passed {
 			fmt.Println("PASSED ✓")
 			details := gateResult.Details
+
+			// Display current metrics
 			if stepsCoverage, ok := details["stepsCoverage"].(float64); ok {
 				if stepsThreshold, ok := details["stepsThreshold"].(float64); ok {
 					fmt.Printf("  Steps Coverage: %.1f%% (>= %.1f%%)\n", stepsCoverage*100, stepsThreshold*100)
@@ -151,6 +165,27 @@ func runValidate(args []string) {
 			if conditionsRate, ok := details["conditionsRate"].(float64); ok {
 				if conditionsThreshold, ok := details["conditionsThreshold"].(float64); ok {
 					fmt.Printf("  Conditions Pass Rate: %.1f%% (>= %.1f%%)\n", conditionsRate*100, conditionsThreshold*100)
+				}
+			}
+
+			// Display baseline comparison if available
+			if baselineData != nil {
+				fmt.Println("  Baseline Comparison:")
+				if baselineStepsCoverage, ok := details["baselineStepsCoverage"].(float64); ok {
+					if stepsDeltaPct, ok := details["stepsDeltaPct"].(float64); ok {
+						fmt.Printf("    Steps: %.1f%% baseline → %.1f%% current (delta: %+.1f%%)\n",
+							baselineStepsCoverage*100,
+							details["stepsCoverage"].(float64)*100,
+							stepsDeltaPct*100)
+					}
+				}
+				if baselineConditionsRate, ok := details["baselineConditionsRate"].(float64); ok {
+					if conditionsDeltaPct, ok := details["conditionsDeltaPct"].(float64); ok {
+						fmt.Printf("    Conditions: %.1f%% baseline → %.1f%% current (delta: %+.1f%%)\n",
+							baselineConditionsRate*100,
+							details["conditionsRate"].(float64)*100,
+							conditionsDeltaPct*100)
+					}
 				}
 			}
 		} else {
