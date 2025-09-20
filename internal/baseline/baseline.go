@@ -117,6 +117,8 @@ func LoadBaseline(path string) (*BaselineData, error) {
 }
 
 // EvaluateGate checks validation results against baseline thresholds
+// If baseline is provided, it performs relative comparison (delta mode)
+// Otherwise it performs absolute threshold checking
 func EvaluateGate(results []validate.StepResult, thresholds ThresholdConfig, baseline *BaselineData) *GateResult {
 	// Calculate current metrics
 	stepsTotal := len(results)
@@ -158,38 +160,95 @@ func EvaluateGate(results []validate.StepResult, thresholds ThresholdConfig, bas
 		conditionsRate = float64(conditionsPass) / float64(conditionsEvaluated)
 	}
 
-	// Check thresholds
-	stepsPassed := stepsCoverage >= thresholds.StepsThreshold
-	conditionsPassed := conditionsRate >= thresholds.ConditionsThreshold
+	// Initialize gate checking variables
+	var stepsPassed, conditionsPassed bool
+	var violations []string
+	details := map[string]interface{}{
+		"stepsTotal":           stepsTotal,
+		"stepsPass":            stepsPass,
+		"stepsCoverage":        stepsCoverage,
+		"stepsThreshold":       thresholds.StepsThreshold,
+		"conditionsTotal":      conditionsTotal,
+		"conditionsPass":       conditionsPass,
+		"conditionsFail":       conditionsFail,
+		"conditionsEvaluated":  conditionsEvaluated,
+		"conditionsRate":       conditionsRate,
+		"conditionsThreshold":  thresholds.ConditionsThreshold,
+		"skipAsFail":          thresholds.SkipAsFail,
+	}
+
+	if baseline != nil {
+		// Relative mode: compare against baseline
+		baselineStepsCoverage := float64(len(baseline.CoveredSteps)) / float64(baseline.StepsTotal)
+		details["baselineStepsCoverage"] = baselineStepsCoverage
+
+		// Calculate deltas
+		stepsDeltaAbs := stepsCoverage - baselineStepsCoverage
+		var stepsDeltaPct float64
+		if baselineStepsCoverage > 0 {
+			stepsDeltaPct = (stepsCoverage - baselineStepsCoverage) / baselineStepsCoverage
+		}
+		details["stepsDeltaAbs"] = stepsDeltaAbs
+		details["stepsDeltaPct"] = stepsDeltaPct
+
+		// For conditions, calculate baseline rate
+		baselineConditionsPass := 0
+		baselineConditionsTotal := 0
+		for _, stepConds := range baseline.Conditions {
+			for _, passed := range stepConds {
+				baselineConditionsTotal++
+				if passed {
+					baselineConditionsPass++
+				}
+			}
+		}
+		var baselineConditionsRate float64
+		if baselineConditionsTotal > 0 {
+			baselineConditionsRate = float64(baselineConditionsPass) / float64(baselineConditionsTotal)
+		}
+		details["baselineConditionsRate"] = baselineConditionsRate
+
+		conditionsDeltaAbs := conditionsRate - baselineConditionsRate
+		var conditionsDeltaPct float64
+		if baselineConditionsRate > 0 {
+			conditionsDeltaPct = (conditionsRate - baselineConditionsRate) / baselineConditionsRate
+		}
+		details["conditionsDeltaAbs"] = conditionsDeltaAbs
+		details["conditionsDeltaPct"] = conditionsDeltaPct
+
+		// Check relative thresholds (delta percentage)
+		stepsPassed = stepsDeltaPct >= -thresholds.StepsThreshold // Allow degradation up to threshold
+		conditionsPassed = conditionsDeltaPct >= -thresholds.ConditionsThreshold
+
+		if !stepsPassed {
+			violations = append(violations, fmt.Sprintf("Steps coverage delta %.1f%% < allowed %.1f%%",
+				stepsDeltaPct*100, -thresholds.StepsThreshold*100))
+		}
+		if !conditionsPassed {
+			violations = append(violations, fmt.Sprintf("Conditions rate delta %.1f%% < allowed %.1f%%",
+				conditionsDeltaPct*100, -thresholds.ConditionsThreshold*100))
+		}
+	} else {
+		// Absolute mode: check against fixed thresholds
+		stepsPassed = stepsCoverage >= thresholds.StepsThreshold
+		conditionsPassed = conditionsRate >= thresholds.ConditionsThreshold
+
+		if !stepsPassed {
+			violations = append(violations, fmt.Sprintf("Steps coverage %.1f%% < required %.1f%%",
+				stepsCoverage*100, thresholds.StepsThreshold*100))
+		}
+		if !conditionsPassed {
+			violations = append(violations, fmt.Sprintf("Conditions pass rate %.1f%% < required %.1f%%",
+				conditionsRate*100, thresholds.ConditionsThreshold*100))
+		}
+	}
+
 	overallPassed := stepsPassed && conditionsPassed
 
-	// Collect violations
-	var violations []string
-	if !stepsPassed {
-		violations = append(violations, fmt.Sprintf("Steps coverage %.1f%% < required %.1f%%", 
-			stepsCoverage*100, thresholds.StepsThreshold*100))
-	}
-	if !conditionsPassed {
-		violations = append(violations, fmt.Sprintf("Conditions pass rate %.1f%% < required %.1f%%", 
-			conditionsRate*100, thresholds.ConditionsThreshold*100))
-	}
-
 	result := &GateResult{
-		Checked: true,
-		Passed:  overallPassed,
-		Details: map[string]interface{}{
-			"stepsTotal":           stepsTotal,
-			"stepsPass":            stepsPass,
-			"stepsCoverage":        stepsCoverage,
-			"stepsThreshold":       thresholds.StepsThreshold,
-			"conditionsTotal":      conditionsTotal,
-			"conditionsPass":       conditionsPass,
-			"conditionsFail":       conditionsFail,
-			"conditionsEvaluated":  conditionsEvaluated,
-			"conditionsRate":       conditionsRate,
-			"conditionsThreshold":  thresholds.ConditionsThreshold,
-			"skipAsFail":          thresholds.SkipAsFail,
-		},
+		Checked:    true,
+		Passed:     overallPassed,
+		Details:    details,
 		Violations: violations,
 	}
 
