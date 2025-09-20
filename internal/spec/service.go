@@ -58,17 +58,17 @@ func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
 		// 序列化为 YAML
 		data, err := yaml.Marshal(spec)
 		if err != nil {
-			return fmt.Errorf("序列化服务 %s 的 ServiceSpec 失败: %w", serviceName, err)
+			return fmt.Errorf("failed to serialize ServiceSpec for service %s: %w", serviceName, err)
 		}
 		
 		// 写入文件
 		filename := fmt.Sprintf("%s.servicespec.yaml", normalizeServiceName(serviceName))
 		filePath := filepath.Join(outDir, filename)
 		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return fmt.Errorf("写入 ServiceSpec 文件 %s 失败: %w", filePath, err)
+			return fmt.Errorf("failed to write ServiceSpec file %s: %w", filePath, err)
 		}
-		
-		fmt.Printf("已生成 ServiceSpec: %s\n", filePath)
+
+		fmt.Printf("Generated ServiceSpec: %s\n", filePath)
 	}
 	
 	return nil
@@ -134,7 +134,7 @@ func generateServiceOperation(opName string, spans []trace.Span) ServiceOperatio
 	
 	return ServiceOperation{
 		OperationId:    opName,
-		Description:    fmt.Sprintf("从追踪自动生成的 %s 操作", opName),
+		Description:    fmt.Sprintf("Auto-generated %s operation from trace", opName),
 		Preconditions:  preconditions,
 		Postconditions: postconditions,
 	}
