@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
+	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/report/html"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
@@ -52,7 +53,7 @@ func runValidate(args []string) {
 	for _, is := range issues {
 		if is.Level == "ERROR" {
 			fmt.Println("Lint 存在 ERROR，终止 Validate")
-			os.Exit(2)
+			os.Exit(exitcode.InputError)
 		}
 	}
 
@@ -162,10 +163,10 @@ func runValidate(args []string) {
 
 	// 退出码判定：验证失败或门控失败都应该非零退出
 	if !ok {
-		os.Exit(3) // 验证失败
+		os.Exit(exitcode.ValidationFailed) // 验证失败
 	}
 	if gateResult != nil && gateResult.Checked && !gateResult.Passed {
-		os.Exit(4) // 门控失败
+		os.Exit(exitcode.GateFailed) // 门控失败
 	}
 	
 	fmt.Println("Validate: OK")

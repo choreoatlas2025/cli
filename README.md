@@ -151,9 +151,10 @@ choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --tra
 
 ### Exit Codes
 - `0`: All validations passed
-- `1`: General CLI error
+- `1`: General CLI error (invalid arguments, etc.)
 - `2`: File not found or parsing error
 - `3`: Validation failed (spec vs trace mismatch)
+- `4`: Gate policy violations (threshold not met)
 
 ### Report Formats
 - **JSON**: Structured data for programmatic processing

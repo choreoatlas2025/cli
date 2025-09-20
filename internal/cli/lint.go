@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/schemas"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -68,6 +69,6 @@ func runLint(args []string) {
 		fmt.Printf("[%s] %s\n", is.Level, is.Msg)
 	}
 	if errCount > 0 {
-		os.Exit(2)
+		os.Exit(exitcode.InputError)
 	}
 }

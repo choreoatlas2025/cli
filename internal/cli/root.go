@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	
+
+	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/edition"
 )
 
@@ -12,7 +13,7 @@ import (
 func Execute() {
 	if len(os.Args) < 2 {
 		printHelp()
-		os.Exit(1)
+		os.Exit(exitcode.CLIError)
 	}
 	cmd := os.Args[1]
 
@@ -36,7 +37,7 @@ func Execute() {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
 		printHelp()
-		os.Exit(1)
+		os.Exit(exitcode.CLIError)
 	}
 }
 
@@ -109,5 +110,5 @@ func runVersion(args []string) {
 
 func exitErr(err error) {
 	fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-	os.Exit(1)
+	os.Exit(exitcode.CLIError)
 }
