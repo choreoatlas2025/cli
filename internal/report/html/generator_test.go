@@ -21,7 +21,7 @@ func TestBuildHTMLData(t *testing.T) {
 		},
 		{
 			Step:   "skip-step",
-			Call:   "skipService.skipOp", 
+			Call:   "skipService.skipOp",
 			Status: "SKIP",
 		},
 	}
@@ -32,6 +32,11 @@ func TestBuildHTMLData(t *testing.T) {
 	}
 
 	data := BuildHTMLData(steps, spans, nil, "CE")
+
+	// Verify CE edition is set
+	if data.Edition != "CE" {
+		t.Errorf("Expected Edition 'CE', got %s", data.Edition)
+	}
 
 	// Verify summary calculations
 	if data.Summary.StepsTotal != 2 {
@@ -98,6 +103,7 @@ func TestWriteHTMLReport(t *testing.T) {
 		Spans: []SpanInfo{
 			{Service: "test", Name: "op", StartNanos: 1000, EndNanos: 2000},
 		},
+		Edition: "CE", // Set CE edition for testing
 	}
 
 	tempFile := "/tmp/test-html-report.html"
@@ -139,6 +145,16 @@ func TestWriteHTMLReport(t *testing.T) {
 	}
 	if !strings.Contains(htmlContent, `"service":"test"`) {
 		t.Error("HTML should contain span service information")
+	}
+
+	// Verify CE edition badge is present in embedded data
+	if !strings.Contains(htmlContent, `"edition":"CE"`) {
+		t.Error("HTML should contain CE edition in embedded data")
+	}
+
+	// Verify edition badge element exists in template
+	if !strings.Contains(htmlContent, `id="edition-badge"`) {
+		t.Error("HTML template should contain edition-badge element")
 	}
 }
 

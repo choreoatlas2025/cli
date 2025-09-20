@@ -1,3 +1,6 @@
+//go:build ce
+// +build ce
+
 package telemetry
 
 import "context"

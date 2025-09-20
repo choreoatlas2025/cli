@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
-	"github.com/choreoatlas2025/cli/internal/edition"
 )
 
 // Execute runs the CLI command
@@ -99,12 +98,13 @@ var (
 	Version      = "0.7.0-dev"
 	GitCommit    = "unknown"
 	BuildTime    = "unknown"
-	BuildEdition = string(edition.EditionCE) // CE版本
+	BuildEdition = "ce" // CE版本标识
 )
 
 func runVersion(args []string) {
-	fmt.Printf("choreoatlas v%s-%s\n", Version, BuildEdition)
-	fmt.Printf("Edition: Community Edition\n")
+	// Display version with -ce suffix
+	fmt.Printf("choreoatlas v%s-ce\n", Version)
+	fmt.Printf("Edition: Community Edition (CE)\n")
 	fmt.Printf("Git Commit: %s\n", GitCommit)
 	fmt.Printf("Build Time: %s\n", BuildTime)
 	fmt.Printf("Go Version: %s\n", runtime.Version())
