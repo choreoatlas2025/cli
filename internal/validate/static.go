@@ -32,7 +32,7 @@ func LintFlow(flowPath string, fs *spec.FlowSpec, opIndex map[string]map[string]
 		return append(issues, LintIssue{"ERROR", "flow 或 graph 必须至少指定一个"}), nil
 	}
 	if len(fs.Flow) > 0 && fs.Graph != nil {
-		return append(issues, LintIssue{"ERROR", "flow 和 graph 不能同时指定，请选择其中一种格式"}), nil
+		return append(issues, LintIssue{"ERROR", "cannot specify both 'flow' and 'graph' - please choose one format"}), nil
 	}
 	
 	// Route to appropriate linting based on format
@@ -45,9 +45,12 @@ func LintFlow(flowPath string, fs *spec.FlowSpec, opIndex map[string]map[string]
 // lintFlow handles traditional flow format linting
 func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation) ([]LintIssue, error) {
 	var issues []LintIssue
-	
+
+	// Add warning for legacy flow format
+	issues = append(issues, LintIssue{"WARN", "Using legacy flow format. Graph (DAG) format is recommended for better expressiveness and validation."})
+
 	if len(fs.Flow) == 0 {
-		return append(issues, LintIssue{"ERROR", "flow 为空"}), nil
+		return append(issues, LintIssue{"ERROR", "flow is empty"}), nil
 	}
 
 	// 2) 步骤唯一性 & 调用合法性检查
@@ -180,12 +183,12 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 	var issues []LintIssue
 	
 	if fs.Graph == nil {
-		return append(issues, LintIssue{"ERROR", "graph 为空"}), nil
+		return append(issues, LintIssue{"ERROR", "graph is empty"}), nil
 	}
 	
 	// 1) Validate basic DAG structure (cycles, connectivity)
 	if err := fs.Graph.ValidateGraphStructure(); err != nil {
-		issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("DAG 结构验证失败: %v", err)})
+		issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("DAG structure validation failed: %v", err)})
 		return issues, nil // Stop here if structure is invalid
 	}
 	
@@ -193,22 +196,22 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 	for _, node := range fs.Graph.Nodes {
 		svc, op, err := splitCall(node.Call)
 		if err != nil {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s call 不合法：%v", node.ID, err)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s has invalid call: %v", node.ID, err)})
 			continue
 		}
 		ops, ok := opIndex[svc]
 		if !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s 引用了未声明的服务：%s", node.ID, svc)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s references undeclared service: %s", node.ID, svc)})
 			continue
 		}
 		if _, ok := ops[op]; !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s 引用了服务 %s 中不存在的操作：%s", node.ID, svc, op)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s references non-existent operation %s in service %s", node.ID, op, svc)})
 		}
 	}
 	
 	// 3) Variable flow validation for DAG
 	if err := validateVariableFlow(fs.Graph); err != nil {
-		issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("变量流向检查失败: %v", err)})
+		issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("Variable flow validation failed: %v", err)})
 	}
 	
 	return issues, nil
@@ -216,10 +219,13 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 
 // validateVariableFlow checks that variables flow correctly through the DAG
 func validateVariableFlow(graph *spec.GraphSpec) error {
+	// Ensure edges are built from depends field
+	graph.EnsureEdges()
+
 	// Build adjacency list and reverse adjacency list
 	adj := make(map[string][]string)
 	radj := make(map[string][]string) // reverse adjacency for dependency tracking
-	
+
 	for _, edge := range graph.Edges {
 		adj[edge.From] = append(adj[edge.From], edge.To)
 		radj[edge.To] = append(radj[edge.To], edge.From)
@@ -276,7 +282,7 @@ func validateVariableFlow(graph *spec.GraphSpec) error {
 		for _, requiredVar := range requiredVars {
 			rootVar := strings.SplitN(requiredVar, ".", 2)[0]
 			if !availableVars[rootVar] {
-				return fmt.Errorf("node %s 引用了无法从前驱节点获取的变量: ${%s}", node.ID, requiredVar)
+				return fmt.Errorf("node %s references variable ${%s} that is not available from predecessor nodes", node.ID, requiredVar)
 			}
 		}
 	}

@@ -79,7 +79,7 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
 
 ## 📋 Contract Structure
 
-### FlowSpec Format
+### FlowSpec Format (Graph - Recommended)
 ```yaml
 info:
   title: "Order Fulfillment Process"
@@ -89,19 +89,37 @@ services:
     spec: "./services/order-service.servicespec.yaml"
   inventoryService:
     spec: "./services/inventory-service.servicespec.yaml"
+graph:
+  nodes:
+    - id: "createOrder"
+      call: "orderService.createOrder"
+      output:
+        orderId: "response.orderId"
+    - id: "checkInventory"
+      call: "inventoryService.reserveInventory"
+      depends: ["createOrder"]
+      input:
+        orderId: "${orderId}"
+      output:
+        reservationId: "response.reservationId"
+```
+
+### FlowSpec Format (Sequential - Legacy)
+```yaml
+info:
+  title: "Order Fulfillment Process"
+services:
+  orderService:
+    spec: "./services/order-service.servicespec.yaml"
 flow:
   - step: "Create Order"
     call: "orderService.createOrder"
-    input:
-      customerId: "${customerId}"
-      items: "${items}"
     output:
-      orderResponse: "response.body"
+      orderId: "response.orderId"
   - step: "Reserve Inventory"
     call: "inventoryService.reserveInventory"
     input:
-      orderId: "${orderResponse.orderId}"
-      items: "${items}"
+      orderId: "${orderId}"
 ```
 
 ### ServiceSpec Format

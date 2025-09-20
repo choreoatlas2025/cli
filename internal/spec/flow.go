@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FlowSpec 表示流程规约
+// FlowSpec represents flow specification
 type FlowSpec struct {
 	Info     FlowInfo                  `yaml:"info"`
 	Services map[string]ServiceBinding `yaml:"services"`
@@ -16,61 +16,83 @@ type FlowSpec struct {
 	Graph    *GraphSpec               `yaml:"graph,omitempty"`   // New DAG format
 }
 
-// FlowInfo 包含流程的基本信息
+// FlowInfo contains basic flow information
 type FlowInfo struct {
-	Title string `yaml:"title"`
+	Title       string `yaml:"title"`
+	Description string `yaml:"description,omitempty"`
+	Version     string `yaml:"version,omitempty"`
 }
 
-// ServiceBinding 表示服务绑定配置
+// ServiceBinding represents service binding configuration
 type ServiceBinding struct {
-	Spec string `yaml:"spec"` // 指向 service.spec.yaml
+	Spec string `yaml:"spec"` // Path to service.spec.yaml
 }
 
-// FlowStep 表示流程中的一个步骤
+// FlowStep represents a step in the flow
 type FlowStep struct {
 	Step     string                 `yaml:"step,omitempty"`
-	Call     string                 `yaml:"call,omitempty"`           // 形如 "userService.createUser"
-	Input    map[string]any         `yaml:"input,omitempty"`          // 支持 ${var} 引用
-	Output   map[string]string      `yaml:"output,omitempty"`         // 令牌归档，如 { newUserResponse: "response.body" }
-	Meta     map[string]interface{} `yaml:"meta,omitempty"`           // 预留
-	Parallel []FlowStep             `yaml:"parallel,omitempty"`       // 并发步骤组
+	Call     string                 `yaml:"call,omitempty"`           // Format: "userService.createUser"
+	Input    map[string]any         `yaml:"input,omitempty"`          // Supports ${var} references
+	Output   map[string]string      `yaml:"output,omitempty"`         // Output mappings e.g. { newUserResponse: "response.body" }
+	Meta     map[string]interface{} `yaml:"meta,omitempty"`           // Reserved for metadata
+	Parallel []FlowStep             `yaml:"parallel,omitempty"`       // Parallel step group
 }
 
-// GraphSpec 表示DAG格式的流程规约
+// GraphSpec represents DAG format flow specification
 type GraphSpec struct {
-	Nodes []GraphNode `yaml:"nodes"`
-	Edges []GraphEdge `yaml:"edges"`
+	Nodes   []GraphNode `yaml:"nodes"`
+	Edges   []GraphEdge `yaml:"edges,omitempty"` // Optional explicit edges
+	ensured bool        `yaml:"-"`               // Internal flag to track if edges are built
 }
 
-// GraphNode 表示DAG中的一个节点
+// GraphNode represents a node in the DAG
 type GraphNode struct {
-	ID     string                 `yaml:"id"`
-	Call   string                 `yaml:"call"`
-	Input  map[string]any         `yaml:"input,omitempty"`
-	Output map[string]string      `yaml:"output,omitempty"`
-	Meta   map[string]interface{} `yaml:"meta,omitempty"`
+	ID      string                 `yaml:"id"`
+	Call    string                 `yaml:"call"`
+	Depends []string               `yaml:"depends,omitempty"`  // Node IDs this node depends on
+	Input   map[string]any         `yaml:"input,omitempty"`
+	Output  map[string]string      `yaml:"output,omitempty"`
+	Meta    map[string]interface{} `yaml:"meta,omitempty"`
 }
 
-// GraphEdge 表示DAG中的一条边
+// GraphEdge represents an edge in the DAG
 type GraphEdge struct {
-	From string `yaml:"from"`
-	To   string `yaml:"to"`
+	From      string `yaml:"from"`
+	To        string `yaml:"to"`
+	Condition string `yaml:"condition,omitempty"` // Optional condition for the edge
 }
 
-// LoadFlowSpec 从文件加载流程规约
+// LoadFlowSpec loads flow specification from file
 func LoadFlowSpec(path string) (*FlowSpec, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取 flowspec 失败: %w", err)
+		return nil, fmt.Errorf("failed to read flowspec: %w", err)
 	}
+
+	// Try to parse with graph format first (preferred)
 	var fs FlowSpec
 	if err := yaml.Unmarshal(b, &fs); err != nil {
-		return nil, fmt.Errorf("解析 flowspec 失败: %w", err)
+		return nil, fmt.Errorf("failed to parse flowspec: %w", err)
 	}
+
+	// Validate that either graph or flow is present (not both)
+	if fs.Graph != nil && len(fs.Flow) > 0 {
+		return nil, fmt.Errorf("flowspec cannot have both 'graph' and 'flow' fields")
+	}
+
+	if fs.Graph == nil && len(fs.Flow) == 0 {
+		return nil, fmt.Errorf("flowspec must have either 'graph' or 'flow' field")
+	}
+
+	// If using graph format, ensure edges are built
+	if fs.Graph != nil {
+		fs.Graph.EnsureEdges()
+	}
+
 	return &fs, nil
 }
 
-// BuildOperationIndex 构建服务操作索引
+// BuildOperationIndex builds service operation index
 func (fs *FlowSpec) BuildOperationIndex(flowPath string) (map[string]*ServiceSpecFile, map[string]map[string]ServiceOperation, error) {
 	base := filepath.Dir(flowPath)
 	serviceFiles := make(map[string]*ServiceSpecFile)
@@ -83,7 +105,7 @@ func (fs *FlowSpec) BuildOperationIndex(flowPath string) (map[string]*ServiceSpe
 		}
 		ss, err := LoadServiceSpec(specPath)
 		if err != nil {
-			return nil, nil, fmt.Errorf("加载服务 '%s' 规约失败: %w", alias, err)
+			return nil, nil, fmt.Errorf("failed to load service '%s' spec: %w", alias, err)
 		}
 		serviceFiles[alias] = ss
 		ops := make(map[string]ServiceOperation)
@@ -130,7 +152,10 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 	if gs == nil {
 		return fmt.Errorf("graph is nil")
 	}
-	
+
+	// Ensure edges are built from depends field
+	gs.EnsureEdges()
+
 	// Build node ID set
 	nodeIDs := make(map[string]bool)
 	for _, node := range gs.Nodes {
@@ -164,6 +189,33 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 	}
 	
 	return nil
+}
+
+// buildEdgesFromDepends converts node depends fields to edges
+func (gs *GraphSpec) buildEdgesFromDepends() {
+	// Clear existing edges if any
+	gs.Edges = []GraphEdge{}
+
+	// Build edges from depends field
+	for _, node := range gs.Nodes {
+		for _, dep := range node.Depends {
+			gs.Edges = append(gs.Edges, GraphEdge{
+				From: dep,
+				To:   node.ID,
+			})
+		}
+	}
+}
+
+// EnsureEdges builds edges from node.depends if not already done
+func (gs *GraphSpec) EnsureEdges() {
+	if gs == nil || gs.ensured {
+		return
+	}
+	if len(gs.Edges) == 0 {
+		gs.buildEdgesFromDepends()
+	}
+	gs.ensured = true
 }
 
 // checkCycles uses DFS to detect cycles in the graph
