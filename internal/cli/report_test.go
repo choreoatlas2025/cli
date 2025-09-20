@@ -110,7 +110,7 @@ func TestWriteJSONReport(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-report.json"
-	err := writeJSONReport(tempFile, steps)
+	err := writeJSONReport(tempFile, steps, nil) // Pass nil gateResult for basic test
 	if err != nil {
 		t.Fatalf("writeJSONReport failed: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestWriteJUnitReport(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-junit.xml"
-	err := writeJUnitReport(tempFile, steps)
+	err := writeJUnitReport(tempFile, steps, nil) // Pass nil gateResult for basic test
 	if err != nil {
 		t.Fatalf("writeJUnitReport failed: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestWriteReportFormats(t *testing.T) {
 	if err == nil {
 		t.Error("WriteReport should fail for unknown format")
 	}
-	if !strings.Contains(err.Error(), "不支持的报告格式") {
+	if !strings.Contains(err.Error(), "Unsupported report format") {
 		t.Errorf("Expected format error message, got: %v", err)
 	}
 }

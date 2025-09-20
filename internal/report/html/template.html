@@ -263,13 +263,37 @@ function renderSummary(data) {
     const passClass = gateResult.passed ? 'gate-pass' : 'gate-fail';
     const passText = gateResult.passed ? '✓ Baseline Gate: PASSED' : '✗ Baseline Gate: FAILED';
     const details = gateResult.details || {};
+
+    // Build baseline comparison HTML if available
+    let baselineComparisonHtml = '';
+    if (details.baselineStepsCoverage || details.baselineConditionsRate) {
+      baselineComparisonHtml = `
+        <div style="margin-top: 8px; font-size: 14px;">
+          <strong>Baseline Comparison:</strong><br>
+          ${details.baselineStepsCoverage ? `
+            Steps: ${formatPercent(details.baselineStepsCoverage)} baseline → ${formatPercent(details.stepsCoverage || 0)} current
+            (Δ ${details.stepsDeltaPct > 0 ? '+' : ''}${(details.stepsDeltaPct * 100).toFixed(1)}%)<br>
+          ` : ''}
+          ${details.baselineConditionsRate ? `
+            Conditions: ${formatPercent(details.baselineConditionsRate)} baseline → ${formatPercent(details.conditionsRate || 0)} current
+            (Δ ${details.conditionsDeltaPct > 0 ? '+' : ''}${(details.conditionsDeltaPct * 100).toFixed(1)}%)
+          ` : ''}
+        </div>
+      `;
+    }
+
     gateDiv.innerHTML = `
       <div class="${passClass}">
         ${passText}
-        ${!gateResult.passed ? `
+        <div style="margin-top: 8px; font-size: 14px;">
+          Steps Coverage: ${formatPercent(details.stepsCoverage || 0)} (required: ≥${formatPercent(details.stepsThreshold || 0.9)})<br>
+          Conditions Pass Rate: ${formatPercent(details.conditionsRate || 0)} (required: ≥${formatPercent(details.conditionsThreshold || 0.95)})
+        </div>
+        ${baselineComparisonHtml}
+        ${!gateResult.passed && gateResult.violations ? `
           <div style="margin-top: 8px; font-size: 14px;">
-            Steps Coverage: ${formatPercent(details.stepsCoverage || 0)} (required: ≥${formatPercent(details.stepsThreshold || 0.9)})<br>
-            Conditions Pass Rate: ${formatPercent(details.conditionsRate || 0)} (required: ≥${formatPercent(details.conditionsThreshold || 0.95)})
+            <strong>Violations:</strong><br>
+            ${gateResult.violations.map(v => `• ${v}`).join('<br>')}
           </div>
         ` : ''}
       </div>

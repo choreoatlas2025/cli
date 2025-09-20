@@ -59,7 +59,9 @@ Commands:
     --trace string         trace.json file path
     --semantic bool        Enable semantic validation (CEL) (default true)
     --causality string     Causality check mode: strict|temporal|off (default "temporal")
+    --causality-tolerance int  Causality constraint tolerance in milliseconds (default 50)
     --baseline string      Baseline file path
+    --baseline-missing string  Baseline missing strategy: fail|treat-as-absolute (default "fail")
     --threshold-steps float    Step coverage threshold (default 0.9)
     --threshold-conds float    Condition pass threshold (default 0.95)
     --skip-as-fail        Treat SKIP conditions as FAIL

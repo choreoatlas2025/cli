@@ -25,13 +25,13 @@ const (
 func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult) error {
 	switch fmtType {
 	case ReportJSON:
-		return writeJSONReport(path, steps)
+		return writeJSONReport(path, steps, gateResult)
 	case ReportJUnit:
-		return writeJUnitReport(path, steps)
+		return writeJUnitReport(path, steps, gateResult)
 	case ReportHTML:
 		return writeHTMLReport(path, steps, spans, gateResult)
 	default:
-		return fmt.Errorf("不支持的报告格式: %s", fmtType)
+		return fmt.Errorf("Unsupported report format: %s", fmtType)
 	}
 }
 
@@ -48,12 +48,41 @@ type CoverageSummary struct {
 	UncoveredSteps   []string          `json:"uncoveredSteps"`
 	CoverageRate     float64           `json:"coverageRate"`
 	ServiceCoverage  map[string]int    `json:"serviceCoverage"`
+	// Baseline comparison fields
+	BaselineStepsCoverage    float64 `json:"baselineStepsCoverage,omitempty"`
+	StepsDeltaAbs           float64 `json:"stepsDeltaAbs,omitempty"`
+	StepsDeltaPct           float64 `json:"stepsDeltaPct,omitempty"`
+	BaselineConditionsRate   float64 `json:"baselineConditionsRate,omitempty"`
+	ConditionsDeltaAbs      float64 `json:"conditionsDeltaAbs,omitempty"`
+	ConditionsDeltaPct      float64 `json:"conditionsDeltaPct,omitempty"`
 }
 
 // writeJSONReport 写入 JSON 格式报告
-func writeJSONReport(path string, steps []validate.StepResult) error {
+func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.GateResult) error {
 	summary := calculateCoverageSummary(steps)
-	
+
+	// Add baseline comparison fields if available
+	if gateResult != nil && gateResult.Details != nil {
+		if val, ok := gateResult.Details["baselineStepsCoverage"].(float64); ok {
+			summary.BaselineStepsCoverage = val
+		}
+		if val, ok := gateResult.Details["stepsDeltaAbs"].(float64); ok {
+			summary.StepsDeltaAbs = val
+		}
+		if val, ok := gateResult.Details["stepsDeltaPct"].(float64); ok {
+			summary.StepsDeltaPct = val
+		}
+		if val, ok := gateResult.Details["baselineConditionsRate"].(float64); ok {
+			summary.BaselineConditionsRate = val
+		}
+		if val, ok := gateResult.Details["conditionsDeltaAbs"].(float64); ok {
+			summary.ConditionsDeltaAbs = val
+		}
+		if val, ok := gateResult.Details["conditionsDeltaPct"].(float64); ok {
+			summary.ConditionsDeltaPct = val
+		}
+	}
+
 	report := struct {
 		Timestamp   time.Time             `json:"timestamp"`
 		TotalSteps  int                   `json:"totalSteps"`
@@ -62,6 +91,7 @@ func writeJSONReport(path string, steps []validate.StepResult) error {
 		Success     bool                  `json:"success"`
 		Steps       []validate.StepResult `json:"steps"`
 		Summary     CoverageSummary       `json:"summary"`
+		GateResult  *html.GateResult      `json:"gateResult,omitempty"`
 	}{
 		Timestamp:   time.Now(),
 		TotalSteps:  len(steps),
@@ -70,6 +100,7 @@ func writeJSONReport(path string, steps []validate.StepResult) error {
 		Success:     true,
 		Steps:       steps,
 		Summary:     summary,
+		GateResult:  gateResult,
 	}
 
 	for _, s := range steps {
@@ -83,14 +114,14 @@ func writeJSONReport(path string, steps []validate.StepResult) error {
 
 	b, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化 JSON 报告失败: %w", err)
+		return fmt.Errorf("Failed to serialize JSON report: %w", err)
 	}
 
 	return os.WriteFile(path, b, 0644)
 }
 
 // writeJUnitReport 写入 JUnit XML 格式报告
-func writeJUnitReport(path string, steps []validate.StepResult) error {
+func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html.GateResult) error {
 	var sb strings.Builder
 	fails := 0
 	for _, s := range steps {
@@ -127,6 +158,35 @@ func writeJUnitReport(path string, steps []validate.StepResult) error {
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf(`    <property name="coverage.coverageRate" value="%.2f"/>`, summary.CoverageRate))
 	sb.WriteString("\n")
+
+	// Add baseline comparison properties if available
+	if gateResult != nil && gateResult.Details != nil {
+		if val, ok := gateResult.Details["baselineStepsCoverage"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsCoverage" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+		if val, ok := gateResult.Details["stepsDeltaAbs"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsDeltaAbs" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+		if val, ok := gateResult.Details["stepsDeltaPct"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsDeltaPct" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+		if val, ok := gateResult.Details["baselineConditionsRate"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsRate" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+		if val, ok := gateResult.Details["conditionsDeltaAbs"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsDeltaAbs" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+		if val, ok := gateResult.Details["conditionsDeltaPct"].(float64); ok {
+			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsDeltaPct" value="%.2f"/>`, val))
+			sb.WriteString("\n")
+		}
+	}
+
 	sb.WriteString("  </properties>\n")
 
 	// Test cases

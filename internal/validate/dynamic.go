@@ -237,7 +237,38 @@ func validateWithTimeSequence(fs *spec.FlowSpec, opIndex map[string]map[string]s
 func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
 	var results []StepResult
 	okAll := true
-	
+
+	// Build call graph and validate DAG constraints first
+	graph, err := BuildCallGraph(tr.Spans)
+	if err != nil {
+		return []StepResult{{
+			Step:    "graph-build",
+			Call:    "internal",
+			Status:  "FAIL",
+			Message: fmt.Sprintf("Failed to build call graph: %v", err),
+		}}, false
+	}
+
+	// Validate DAG constraints (cycle detection, edge constraints)
+	toleranceNanos := GlobalCausalityToleranceMs * 1000000
+	violations := graph.ValidateEdgeConstraints(toleranceNanos)
+	if len(violations) > 0 {
+		okAll = false
+		// Add violations as a result
+		dagResult := StepResult{
+			Step:    "DAG Validation",
+			Call:    "internal",
+			Status:  "FAIL",
+			Message: fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+		}
+		results = append(results, dagResult)
+
+		// Output detailed violations
+		for _, v := range violations {
+			fmt.Printf("[DAG Violation] %s: %s\n", v.Type, v.Message)
+		}
+	}
+
 	// Build span matching index by service.operation
 	spanIndex := make(map[string][]trace.Span)
 	for _, span := range tr.Spans {
@@ -251,10 +282,10 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 		// Should not happen if lint passed, but handle gracefully
 		for _, node := range fs.Graph.Nodes {
 			results = append(results, StepResult{
-				Step: node.ID, 
-				Call: node.Call, 
-				Status: "FAIL", 
-				Message: fmt.Sprintf("DAG 拓扑排序失败: %v", err),
+				Step: node.ID,
+				Call: node.Call,
+				Status: "FAIL",
+				Message: fmt.Sprintf("DAG topological sort failed: %v", err),
 			})
 		}
 		return results, false
@@ -269,8 +300,8 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 			results = append(results, StepResult{
 				Step: nodeID, 
 				Call: "", 
-				Status: "FAIL", 
-				Message: "节点未找到",
+				Status: "FAIL",
+				Message: "Node not found",
 			})
 			okAll = false
 			continue
@@ -294,7 +325,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 				Step: node.ID, 
 				Call: node.Call, 
 				Status: "FAIL", 
-				Message: "未在 trace 中匹配到对应 span",
+				Message: "No matching span found in trace",
 			})
 			okAll = false
 			continue
@@ -307,7 +338,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 					Step: node.ID,
 					Call: node.Call,
 					Status: "FAIL",
-					Message: fmt.Sprintf("因果关系校验失败: %v", err),
+					Message: fmt.Sprintf("Causality validation failed: %v", err),
 				})
 				okAll = false
 				continue
