@@ -1,0 +1,290 @@
+# Complete ChoreoAtlas CI/CD workflow with all features
+# Copy this file to .github/workflows/choreoatlas-full.yml in your repository
+
+name: ChoreoAtlas Complete CI/CD
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'contracts/**'
+      - 'traces/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      trace_file:
+        description: 'Trace file to validate against'
+        required: false
+        default: 'examples/traces/successful-order.trace.json'
+      generate_report:
+        description: 'Generate HTML report'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  FLOWSPEC_PATH: examples/flows/order-fulfillment.flowspec.yaml
+  TRACE_PATH: ${{ github.event.inputs.trace_file || 'examples/traces/successful-order.trace.json' }}
+  DOCKER_IMAGE: choreoatlas/cli:latest
+
+jobs:
+  # Stage 1: Static Analysis
+  lint:
+    name: Static Contract Validation
+    runs-on: ubuntu-latest
+    outputs:
+      lint_status: ${{ steps.lint.outcome }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.docker-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('**/Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
+      - name: Lint FlowSpec
+        id: lint
+        run: |
+          echo "🔍 Linting FlowSpec at ${{ env.FLOWSPEC_PATH }}"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} lint \
+            --flow /workspace/${{ env.FLOWSPEC_PATH }}
+
+      - name: Upload FlowSpec artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: flowspec-contract
+          path: ${{ env.FLOWSPEC_PATH }}
+          retention-days: 7
+
+  # Stage 2: Dynamic Validation
+  validate:
+    name: Dynamic Trace Validation
+    runs-on: ubuntu-latest
+    needs: lint
+    if: needs.lint.outputs.lint_status == 'success'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate against trace
+        id: validate
+        run: |
+          echo "🧪 Validating against trace: ${{ env.TRACE_PATH }}"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} validate \
+            --flow /workspace/${{ env.FLOWSPEC_PATH }} \
+            --trace /workspace/${{ env.TRACE_PATH }} \
+            --semantic true \
+            --causality temporal \
+            --causality-tolerance 50 \
+            --report-format json \
+            --report-out /workspace/validation-report.json
+
+      - name: Parse validation results
+        id: results
+        if: always()
+        run: |
+          if [ -f validation-report.json ]; then
+            COVERAGE=$(jq -r '.summary.stepsCoverage' validation-report.json)
+            echo "step_coverage=$COVERAGE" >> $GITHUB_OUTPUT
+            echo "📊 Step Coverage: ${COVERAGE}%"
+          fi
+
+      - name: Upload JSON report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: validation-report-json
+          path: validation-report.json
+          retention-days: 30
+
+  # Stage 3: Report Generation
+  report:
+    name: Generate Reports
+    runs-on: ubuntu-latest
+    needs: validate
+    if: always() && (github.event.inputs.generate_report == 'true' || github.event_name == 'push')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate HTML report
+        run: |
+          echo "📄 Generating HTML report"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} validate \
+            --flow /workspace/${{ env.FLOWSPEC_PATH }} \
+            --trace /workspace/${{ env.TRACE_PATH }} \
+            --report-format html \
+            --report-out /workspace/validation-report.html
+
+      - name: Generate JUnit report
+        run: |
+          echo "📄 Generating JUnit XML report"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} validate \
+            --flow /workspace/${{ env.FLOWSPEC_PATH }} \
+            --trace /workspace/${{ env.TRACE_PATH }} \
+            --report-format junit \
+            --report-out /workspace/junit-report.xml
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v3
+        with:
+          name: html-report
+          path: validation-report.html
+          retention-days: 30
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Contract Validation Results
+          path: junit-report.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  # Stage 4: Quality Gate
+  gate:
+    name: Quality Gate Check
+    runs-on: ubuntu-latest
+    needs: [lint, validate]
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run CI gate
+        id: gate
+        run: |
+          echo "🚦 Running quality gate check"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} ci-gate \
+            --flow /workspace/${{ env.FLOWSPEC_PATH }} \
+            --trace /workspace/${{ env.TRACE_PATH }}
+
+      - name: Gate status
+        if: always()
+        run: |
+          if [ "${{ steps.gate.outcome }}" == "success" ]; then
+            echo "✅ Quality gate PASSED"
+          else
+            echo "❌ Quality gate FAILED"
+            exit 1
+          fi
+
+  # Stage 5: PR Comments (only for PRs)
+  comment:
+    name: PR Status Comment
+    runs-on: ubuntu-latest
+    needs: [lint, validate, gate]
+    if: github.event_name == 'pull_request' && always()
+
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v3
+        with:
+          name: validation-report-json
+          path: ./reports
+
+      - name: Parse coverage data
+        id: coverage
+        run: |
+          if [ -f ./reports/validation-report.json ]; then
+            STEPS=$(jq -r '.summary.stepsCoverage' ./reports/validation-report.json)
+            CONDITIONS=$(jq -r '.summary.conditionsRate' ./reports/validation-report.json)
+            echo "steps=$STEPS" >> $GITHUB_OUTPUT
+            echo "conditions=$CONDITIONS" >> $GITHUB_OUTPUT
+          else
+            echo "steps=N/A" >> $GITHUB_OUTPUT
+            echo "conditions=N/A" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lintStatus = '${{ needs.lint.result }}';
+            const validateStatus = '${{ needs.validate.result }}';
+            const gateStatus = '${{ needs.gate.result }}';
+            const stepCoverage = '${{ steps.coverage.outputs.steps }}';
+            const conditionRate = '${{ steps.coverage.outputs.conditions }}';
+
+            const statusEmoji = {
+              'success': '✅',
+              'failure': '❌',
+              'cancelled': '⚠️',
+              'skipped': '⏭️'
+            };
+
+            const comment = `## ChoreoAtlas Validation Report
+
+            | Stage | Status | Details |
+            |-------|--------|---------|
+            | Lint | ${statusEmoji[lintStatus]} ${lintStatus} | Static validation of contracts |
+            | Validate | ${statusEmoji[validateStatus]} ${validateStatus} | Dynamic trace validation |
+            | Gate | ${statusEmoji[gateStatus]} ${gateStatus} | Quality thresholds check |
+
+            ### Coverage Metrics
+            - **Steps Coverage**: ${stepCoverage}%
+            - **Conditions Rate**: ${conditionRate}%
+
+            ### Artifacts
+            - [Download HTML Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Download JSON Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ---
+            *Generated by ChoreoAtlas CE v0.7.0*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Stage 6: Discovery (manual trigger only)
+  discover:
+    name: Contract Discovery
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.trace_file != ''
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Discover from trace
+        run: |
+          echo "🔍 Discovering contracts from trace"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} discover \
+            --trace /workspace/${{ env.TRACE_PATH }} \
+            --out /workspace/discovered.flowspec.yaml \
+            --out-services /workspace/discovered-services \
+            --title "Discovered from ${{ env.TRACE_PATH }}"
+
+      - name: Upload discovered contracts
+        uses: actions/upload-artifact@v3
+        with:
+          name: discovered-contracts
+          path: |
+            discovered.flowspec.yaml
+            discovered-services/
+          retention-days: 7
+
+      - name: Validate discovered contracts
+        run: |
+          echo "🧪 Validating discovered contracts"
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            ${{ env.DOCKER_IMAGE }} lint \
+            --flow /workspace/discovered.flowspec.yaml

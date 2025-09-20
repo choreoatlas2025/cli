@@ -1,0 +1,38 @@
+# Minimal ChoreoAtlas validation workflow
+# Copy this file to .github/workflows/choreoatlas.yml in your repository
+
+name: Contract Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.flowspec.yaml'
+      - '**.servicespec.yaml'
+      - '**.trace.json'
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint contracts
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            choreoatlas/cli:latest lint \
+            --flow /workspace/examples/flows/order-fulfillment.flowspec.yaml
+
+      - name: Validate against trace
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace \
+            choreoatlas/cli:latest validate \
+            --flow /workspace/examples/flows/order-fulfillment.flowspec.yaml \
+            --trace /workspace/examples/traces/successful-order.trace.json
+
+      - name: Check exit code
+        if: success()
+        run: echo "✅ Contract validation passed!"

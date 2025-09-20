@@ -1,6 +1,0 @@
-service: shippingService
-operations:
-    - operationId: createShipment
-      description: 从追踪自动生成的 createShipment 操作
-      postconditions:
-        resp_status_code: response.status == 201
