@@ -1,47 +1,243 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/flowspec.schema.json",
+  "$id": "https://github.com/choreoatlas2025/cli/schemas/flowspec.schema.json",
+  "title": "ChoreoAtlas FlowSpec",
+  "description": "Schema for ChoreoAtlas flow specification supporting both graph and sequential flow formats",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["info", "services", "flow"],
+
+  "required": ["info", "services"],
   "properties": {
+    "info": { "$ref": "#/$defs/info" },
+    "services": { "$ref": "#/$defs/services" },
+    "graph": { "$ref": "#/$defs/graph" },
+    "flow": { "$ref": "#/$defs/flow" }
+  },
+
+  "additionalProperties": false,
+
+  "oneOf": [
+    {
+      "required": ["graph"],
+      "not": { "required": ["flow"] },
+      "description": "Graph (DAG) format - recommended"
+    },
+    {
+      "required": ["flow"],
+      "not": { "required": ["graph"] },
+      "description": "Sequential flow format - legacy"
+    }
+  ],
+
+  "$defs": {
     "info": {
       "type": "object",
+      "description": "Metadata about the flow specification",
       "required": ["title"],
       "additionalProperties": false,
-      "properties": { 
-        "title": { "type": "string", "minLength": 1 } 
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Title of the flow specification"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of the flow"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version of the flow specification"
+        }
       }
     },
+
     "services": {
       "type": "object",
+      "description": "Service definitions and their specifications",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
         "required": ["spec"],
         "additionalProperties": false,
-        "properties": { 
-          "spec": { "type": "string", "minLength": 1 } 
+        "properties": {
+          "spec": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path to the service specification file"
+          }
         }
       }
     },
+
+    "graph": {
+      "type": "object",
+      "description": "DAG-based flow definition",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "List of nodes in the DAG",
+          "items": {
+            "type": "object",
+            "required": ["id", "call"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-zA-Z_][\\w-]*$",
+                "description": "Unique identifier for the node"
+              },
+              "call": {
+                "type": "string",
+                "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$",
+                "description": "Service operation to call (format: service.operation)"
+              },
+              "depends": {
+                "type": "array",
+                "description": "List of node IDs this node depends on",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "input": {
+                "type": "object",
+                "description": "Input mappings for the operation",
+                "additionalProperties": true
+              },
+              "output": {
+                "type": "object",
+                "description": "Output variable mappings",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "meta": {
+                "type": "object",
+                "description": "Additional metadata for the node",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Optional explicit edge definitions",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "Source node ID"
+              },
+              "to": {
+                "type": "string",
+                "description": "Target node ID"
+              },
+              "condition": {
+                "type": "string",
+                "description": "Optional condition for the edge"
+              }
+            }
+          }
+        }
+      }
+    },
+
     "flow": {
       "type": "array",
+      "description": "Sequential flow definition",
       "minItems": 1,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["step", "call"],
-        "properties": {
-          "step": { "type": "string", "minLength": 1 },
-          "call": { "type": "string", "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$" },
-          "input": {},
-          "output": {
+        "oneOf": [
+          {
             "type": "object",
-            "additionalProperties": { "type": "string" }
+            "description": "Regular step",
+            "additionalProperties": false,
+            "required": ["step", "call"],
+            "properties": {
+              "step": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Step name"
+              },
+              "call": {
+                "type": "string",
+                "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$",
+                "description": "Service operation to call"
+              },
+              "input": {
+                "type": "object",
+                "description": "Input mappings",
+                "additionalProperties": true
+              },
+              "output": {
+                "type": "object",
+                "description": "Output variable mappings",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "meta": {
+                "type": "object",
+                "description": "Additional metadata",
+                "additionalProperties": true
+              }
+            }
           },
-          "meta": { "type": "object" }
-        }
+          {
+            "type": "object",
+            "description": "Parallel step group",
+            "additionalProperties": false,
+            "required": ["step", "parallel"],
+            "properties": {
+              "step": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Parallel group name"
+              },
+              "parallel": {
+                "type": "array",
+                "minItems": 2,
+                "description": "Steps to execute in parallel",
+                "items": {
+                  "type": "object",
+                  "required": ["step", "call"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "step": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "call": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z_][\\w-]*\\.[a-zA-Z_][\\w-]*$"
+                    },
+                    "input": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "output": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }
