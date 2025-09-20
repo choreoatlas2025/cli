@@ -33,6 +33,9 @@ const (
 // Global causality mode setting
 var GlobalCausalityMode = CausalityTemporal
 
+// GlobalCausalityToleranceMs 因果约束容差（毫秒）
+var GlobalCausalityToleranceMs int64 = 50
+
 // ValidateAgainstTrace 根据追踪数据验证流程执行（支持因果和并发校验）
 func ValidateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
 	// Route to appropriate validation based on format
@@ -78,12 +81,34 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 			Step:    "graph-build",
 			Call:    "internal",
 			Status:  "FAIL",
-			Message: fmt.Sprintf("构建调用图失败: %v", err),
+			Message: fmt.Sprintf("Failed to build call graph: %v", err),
 		}}, false
 	}
 
+	// 验证DAG约束（循环检测、边约束等）
+	toleranceNanos := GlobalCausalityToleranceMs * 1000000 // 转换为纳秒
+	violations := graph.ValidateEdgeConstraints(toleranceNanos)
+
 	// 执行因果校验
 	results, allPassed := CheckCausality(fs, graph)
+
+	// 如果有违规，添加到结果中
+	if len(violations) > 0 {
+		allPassed = false
+		// 在结果前插入DAG验证结果
+		dagResult := StepResult{
+			Step:    "DAG Validation",
+			Call:    "internal",
+			Status:  "FAIL",
+			Message: fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+		}
+		results = append([]StepResult{dagResult}, results...)
+
+		// 输出详细的违规信息
+		for _, v := range violations {
+			fmt.Printf("[DAG Violation] %s: %s\n", v.Type, v.Message)
+		}
+	}
 
 	// 应用语义校验
 	if EnableSemantic {
@@ -105,7 +130,7 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 										if results[i].Message != "" {
 											results[i].Message += " | "
 										}
-										results[i].Message += "语义校验未通过"
+										results[i].Message += "Semantic validation failed"
 										allPassed = false
 									}
 								}

@@ -163,7 +163,7 @@ func checkSingleStep(step spec.FlowStep, graph *CallGraph) StepResult {
 			Step:    step.Step,
 			Call:    step.Call,
 			Status:  "FAIL",
-			Message: fmt.Sprintf("解析调用失败: %v", err),
+			Message: fmt.Sprintf("Failed to parse call: %v", err),
 		}
 	}
 
@@ -181,7 +181,7 @@ func checkSingleStep(step spec.FlowStep, graph *CallGraph) StepResult {
 			Step:    step.Step,
 			Call:    step.Call,
 			Status:  "FAIL",
-			Message: "未在 trace 中找到对应 span",
+			Message: "No matching span found in trace",
 		}
 	}
 
@@ -205,7 +205,7 @@ func checkParallelSteps(parallelSteps []spec.FlowStep, graph *CallGraph) []StepR
 				Step:    step.Step,
 				Call:    step.Call,
 				Status:  "FAIL",
-				Message: fmt.Sprintf("解析调用失败: %v", err),
+				Message: fmt.Sprintf("Failed to parse call: %v", err),
 			})
 			continue
 		}
@@ -223,7 +223,7 @@ func checkParallelSteps(parallelSteps []spec.FlowStep, graph *CallGraph) []StepR
 				Step:    step.Step,
 				Call:    step.Call,
 				Status:  "FAIL",
-				Message: "未在 trace 中找到对应 span",
+				Message: "No matching span found in trace",
 			})
 		} else {
 			matchedNodes = append(matchedNodes, matchedNode)
@@ -242,7 +242,7 @@ func checkParallelSteps(parallelSteps []spec.FlowStep, graph *CallGraph) []StepR
 			for i := range results {
 				if results[i].Status == "PASS" {
 					results[i].Status = "FAIL"
-					results[i].Message = "并发约束验证失败：步骤未并发执行"
+					results[i].Message = "Concurrency constraint violation: steps not executed concurrently"
 				}
 			}
 		}
@@ -322,7 +322,7 @@ func ValidateSequentialSteps(flow *spec.FlowSpec, spans []trace.Span) ([]StepRes
 			Step:    "graph-build",
 			Call:    "internal",
 			Status:  "FAIL",
-			Message: fmt.Sprintf("构建调用图失败: %v", err),
+			Message: fmt.Sprintf("Failed to build call graph: %v", err),
 		}}, false
 	}
 
@@ -363,4 +363,182 @@ func GetCallGraphStats(graph *CallGraph) map[string]any {
 	stats["services"] = serviceStats
 
 	return stats
+}
+
+// EdgeViolation 表示边约束违规
+type EdgeViolation struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Type    string `json:"type"`    // "cycle", "causality", "overlap"
+	Message string `json:"message"`
+}
+
+// DetectCycle 检测调用图中的循环依赖
+func (g *CallGraph) DetectCycle() (bool, []string) {
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+	var cyclePath []string
+
+	// 对每个节点进行DFS
+	for spanID := range g.Nodes {
+		if !visited[spanID] {
+			if path := g.dfsDetectCycle(spanID, visited, recStack, []string{}); path != nil {
+				cyclePath = path
+				return true, cyclePath
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// dfsDetectCycle DFS辅助函数检测循环
+func (g *CallGraph) dfsDetectCycle(spanID string, visited, recStack map[string]bool, path []string) []string {
+	visited[spanID] = true
+	recStack[spanID] = true
+	path = append(path, spanID)
+
+	// 检查所有边
+	for _, edge := range g.Edges {
+		if edge.From == spanID && edge.Relationship != "concurrent" {
+			if !visited[edge.To] {
+				if cyclePath := g.dfsDetectCycle(edge.To, visited, recStack, path); cyclePath != nil {
+					return cyclePath
+				}
+			} else if recStack[edge.To] {
+				// 找到循环，构建循环路径
+				cycleStart := -1
+				for i, id := range path {
+					if id == edge.To {
+						cycleStart = i
+						break
+					}
+				}
+				if cycleStart >= 0 {
+					return append(path[cycleStart:], edge.To)
+				}
+			}
+		}
+	}
+
+	recStack[spanID] = false
+	return nil
+}
+
+// ValidateEdgeConstraints 验证边约束（包括容差）
+func (g *CallGraph) ValidateEdgeConstraints(toleranceNanos int64) []EdgeViolation {
+	var violations []EdgeViolation
+
+	// 1. 检测循环
+	if hasCycle, cyclePath := g.DetectCycle(); hasCycle {
+		violations = append(violations, EdgeViolation{
+			From:    cyclePath[len(cyclePath)-2],
+			To:      cyclePath[len(cyclePath)-1],
+			Type:    "cycle",
+			Message: fmt.Sprintf("Cycle detected: %v", cyclePath),
+		})
+	}
+
+	// 2. 验证因果约束
+	for _, edge := range g.Edges {
+		fromNode := g.Nodes[edge.From]
+		toNode := g.Nodes[edge.To]
+
+		if fromNode == nil || toNode == nil {
+			continue
+		}
+
+		switch edge.Relationship {
+		case "follows":
+			// 验证时序关系：from应该在to之前结束（考虑容差）
+			if fromNode.EndNanos > toNode.StartNanos+toleranceNanos {
+				violations = append(violations, EdgeViolation{
+					From: edge.From,
+					To:   edge.To,
+					Type: "causality",
+					Message: fmt.Sprintf("Causality constraint violation: %s.%s should complete before %s.%s (tolerance %dms)",
+						fromNode.Service, fromNode.Operation,
+						toNode.Service, toNode.Operation,
+						toleranceNanos/1000000),
+				})
+			}
+		case "parent":
+			// 验证父子关系：子节点应在父节点时间范围内
+			if toNode.StartNanos < fromNode.StartNanos-toleranceNanos ||
+				toNode.EndNanos > fromNode.EndNanos+toleranceNanos {
+				violations = append(violations, EdgeViolation{
+					From: edge.From,
+					To:   edge.To,
+					Type: "parent-child",
+					Message: fmt.Sprintf("Parent-child constraint violation: %s.%s should be within parent %s.%s time range",
+						toNode.Service, toNode.Operation,
+						fromNode.Service, fromNode.Operation),
+				})
+			}
+		case "concurrent":
+			// 验证并发关系：应有时间重叠
+			if !isOverlapping(fromNode, toNode) {
+				violations = append(violations, EdgeViolation{
+					From: edge.From,
+					To:   edge.To,
+					Type: "overlap",
+					Message: fmt.Sprintf("Concurrency constraint violation: %s.%s and %s.%s should overlap but don't",
+						fromNode.Service, fromNode.Operation,
+						toNode.Service, toNode.Operation),
+				})
+			}
+		}
+	}
+
+	return violations
+}
+
+// GetTopologicalOrder 获取拓扑排序
+func (g *CallGraph) GetTopologicalOrder() ([]string, error) {
+	// 计算入度
+	inDegree := make(map[string]int)
+	for spanID := range g.Nodes {
+		inDegree[spanID] = 0
+	}
+
+	for _, edge := range g.Edges {
+		if edge.Relationship != "concurrent" {
+			inDegree[edge.To]++
+		}
+	}
+
+	// 找出所有入度为0的节点
+	var queue []string
+	for spanID, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, spanID)
+		}
+	}
+
+	var sorted []string
+	processedCount := 0
+
+	// 执行拓扑排序
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		sorted = append(sorted, current)
+		processedCount++
+
+		// 更新相邻节点的入度
+		for _, edge := range g.Edges {
+			if edge.From == current && edge.Relationship != "concurrent" {
+				inDegree[edge.To]--
+				if inDegree[edge.To] == 0 {
+					queue = append(queue, edge.To)
+				}
+			}
+		}
+	}
+
+	if processedCount != len(g.Nodes) {
+		return nil, fmt.Errorf("Cannot complete topological sort: cycle detected in graph")
+	}
+
+	return sorted, nil
 }

@@ -16,22 +16,23 @@ import (
 
 func runValidate(args []string) {
 	fs := flag.NewFlagSet("validate", flag.ExitOnError)
-	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec 文件路径")
-	tracePath := fs.String("trace", "", "trace.json 路径")
-	reportFormat := fs.String("report-format", "", "报告格式：json|junit|html")
-	reportOut := fs.String("report-out", "", "报告输出路径")
-	semantic := fs.Bool("semantic", true, "启用语义校验（CEL）")
-	baselinePath := fs.String("baseline", "", "基线文件路径")
-	thresholdSteps := fs.Float64("threshold-steps", 0.9, "步骤覆盖率阈值")
-	thresholdConds := fs.Float64("threshold-conds", 0.95, "条件通过率阈值")
-	skipAsFail := fs.Bool("skip-as-fail", false, "将SKIP条件视为FAIL")
-	causalityMode := fs.String("causality", "temporal", "因果检查模式：strict|temporal|off（默认 temporal）")
-	baselineMissing := fs.String("baseline-missing", "fail", "基线缺失策略：fail|treat-as-absolute")
+	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
+	tracePath := fs.String("trace", "", "trace.json path")
+	reportFormat := fs.String("report-format", "", "Report format: json|junit|html")
+	reportOut := fs.String("report-out", "", "Report output path")
+	semantic := fs.Bool("semantic", true, "Enable semantic validation (CEL)")
+	baselinePath := fs.String("baseline", "", "Baseline file path")
+	thresholdSteps := fs.Float64("threshold-steps", 0.9, "Step coverage threshold")
+	thresholdConds := fs.Float64("threshold-conds", 0.95, "Condition pass rate threshold")
+	skipAsFail := fs.Bool("skip-as-fail", false, "Treat SKIP conditions as FAIL")
+	causalityMode := fs.String("causality", "temporal", "Causality check mode: strict|temporal|off (default: temporal)")
+	causalityTolerance := fs.Int("causality-tolerance", 50, "Causality constraint tolerance in milliseconds (default: 50ms)")
+	baselineMissing := fs.String("baseline-missing", "fail", "Baseline missing strategy: fail|treat-as-absolute")
 	_ = fs.Parse(args)
 
-	// 输入参数验证
+	// Input parameter validation
 	if *tracePath == "" {
-		exitErr(errors.New("必须指定 --trace 参数"))
+		exitErr(errors.New("--trace parameter is required"))
 	}
 
 	flow, err := spec.LoadFlowSpec(*flowPath)
@@ -58,16 +59,16 @@ func runValidate(args []string) {
 		}
 	}
 
-	// 加载 trace 数据
+	// Load trace data
 	tr, err := trace.LoadFromFile(*tracePath)
 	if err != nil {
 		exitErr(err)
 	}
 
-	// 设置语义校验开关
+	// Set semantic validation switch
 	validate.EnableSemantic = *semantic
-	
-	// 设置因果检查模式
+
+	// Set causality check mode
 	switch validate.CausalityMode(*causalityMode) {
 	case validate.CausalityStrict:
 		validate.GlobalCausalityMode = validate.CausalityStrict
@@ -76,12 +77,15 @@ func runValidate(args []string) {
 	case validate.CausalityOff:
 		validate.GlobalCausalityMode = validate.CausalityOff
 	default:
-		exitErr(fmt.Errorf("无效的因果检查模式: %s，支持的模式: strict|temporal|off", *causalityMode))
+		exitErr(fmt.Errorf("Invalid causality mode: %s, supported modes: strict|temporal|off", *causalityMode))
 	}
+
+	// Set causality tolerance
+	validate.GlobalCausalityToleranceMs = int64(*causalityTolerance)
 
 	results, ok := validate.ValidateAgainstTrace(flow, opIndex, tr)
 
-	// 基线门控检查
+	// Baseline gate check
 	var gateResult *baseline.GateResult
 	var baselineData *baseline.BaselineData
 	baselineExpected := *baselinePath != ""
@@ -93,16 +97,16 @@ func runValidate(args []string) {
 		if err != nil {
 			// Handle baseline missing according to strategy
 			if *baselineMissing == "fail" {
-				exitErr(fmt.Errorf("基线文件加载失败 %s: %w", *baselinePath, err))
+				exitErr(fmt.Errorf("Failed to load baseline file %s: %w", *baselinePath, err))
 			} else if *baselineMissing == "treat-as-absolute" {
-				fmt.Printf("[WARN] 基线文件不可用，回退到绝对阈值模式: %v\n", err)
+				fmt.Printf("[WARN] Baseline file not available, falling back to absolute threshold mode: %v\n", err)
 				baselineData = nil
 				baselineExpected = false
 			}
 		}
 	}
 
-	// 执行阈值门控（可能有基线文件）
+	// Execute threshold gate (with optional baseline)
 	thresholds := baseline.ThresholdConfig{
 		StepsThreshold:      *thresholdSteps,
 		ConditionsThreshold: *thresholdConds,
@@ -110,7 +114,7 @@ func runValidate(args []string) {
 	}
 	gateResult = baseline.EvaluateGate(results, thresholds, baselineData)
 
-	// 生成报告（如果指定了格式和路径）
+	// Generate report (if format and path specified)
 	if *reportFormat != "" && *reportOut != "" {
 		var format ReportFormat
 		switch *reportFormat {
@@ -121,7 +125,7 @@ func runValidate(args []string) {
 		case "html":
 			format = ReportHTML
 		default:
-			exitErr(fmt.Errorf("不支持的报告格式: %s", *reportFormat))
+			exitErr(fmt.Errorf("Unsupported report format: %s", *reportFormat))
 		}
 
 		// Convert baseline GateResult to html.GateResult for report
@@ -135,12 +139,12 @@ func runValidate(args []string) {
 		}
 
 		if err := WriteReport(*reportOut, format, results, tr.Spans, htmlGateResult); err != nil {
-			exitErr(fmt.Errorf("生成报告失败: %w", err))
+			exitErr(fmt.Errorf("Failed to generate report: %w", err))
 		}
-		fmt.Printf("报告已保存: %s (格式: %s)\n", *reportOut, *reportFormat)
+		fmt.Printf("Report saved: %s (format: %s)\n", *reportOut, *reportFormat)
 	}
 
-	// 控制台输出
+	// Console output
 	for _, r := range results {
 		if r.Status == "PASS" {
 			fmt.Printf("[PASS] %s (%s)\n", r.Step, r.Call)
@@ -149,7 +153,7 @@ func runValidate(args []string) {
 		}
 	}
 
-	// 门控结果输出和退出码判定
+	// Gate result output and exit code determination
 	if gateResult != nil && gateResult.Checked {
 		fmt.Printf("\n[GATE] Baseline Gate: ")
 		if gateResult.Passed {
@@ -196,12 +200,12 @@ func runValidate(args []string) {
 		}
 	}
 
-	// 退出码判定：验证失败或门控失败都应该非零退出
+	// Exit code determination: validation failure or gate failure should exit non-zero
 	if !ok {
-		os.Exit(exitcode.ValidationFailed) // 验证失败
+		os.Exit(exitcode.ValidationFailed) // Validation failed
 	}
 	if gateResult != nil && gateResult.Checked && !gateResult.Passed {
-		os.Exit(exitcode.GateFailed) // 门控失败
+		os.Exit(exitcode.GateFailed) // Gate failed
 	}
 	
 	fmt.Println("Validate: OK")

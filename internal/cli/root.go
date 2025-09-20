@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/edition"
@@ -110,5 +111,20 @@ func runVersion(args []string) {
 
 func exitErr(err error) {
 	fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-	os.Exit(exitcode.CLIError)
+	// 根据错误类型选择正确的退出码
+	exitCode := exitcode.CLIError
+
+	// 检查是否是文件/输入相关错误
+	errStr := err.Error()
+	if strings.Contains(errStr, "no such file") ||
+		strings.Contains(errStr, "cannot read") ||
+		strings.Contains(errStr, "failed to load") ||
+		strings.Contains(errStr, "failed to parse") ||
+		strings.Contains(errStr, "invalid") ||
+		strings.Contains(errStr, "must specify") ||
+		strings.Contains(errStr, "required") {
+		exitCode = exitcode.InputError
+	}
+
+	os.Exit(exitCode)
 }
