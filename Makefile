@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+# SPDX-License-Identifier: Apache-2.0
 PROJECT_PKG := github.com/choreoatlas2025/cli
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS     := -s -w -X '$(PROJECT_PKG)/internal/cli.Version=$(VERSION)' -X '$(PROJECT_PKG)/internal/cli.BuildEdition=ce'

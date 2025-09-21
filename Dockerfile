@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+# SPDX-License-Identifier: Apache-2.0
 # Multi-stage build for ChoreoAtlas CLI
 FROM golang:1.24-alpine AS builder
 

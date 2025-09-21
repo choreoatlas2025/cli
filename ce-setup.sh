@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+# SPDX-License-Identifier: Apache-2.0
 # CE v0.7.0-ce Setup Script with Auto Issue URL Backfill
 # 使用前请修改以下变量
 

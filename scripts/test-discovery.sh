@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+# SPDX-License-Identifier: Apache-2.0
 # Test script for discover functionality
 # Validates that discovered contracts pass schema validation
 

@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+# SPDX-License-Identifier: Apache-2.0
 # PR 执行命令（根据需要逐个执行）
 
 # PR#1: 退出码对齐
