@@ -24,12 +24,12 @@ func LintFlow(flowPath string, fs *spec.FlowSpec, opIndex map[string]map[string]
 
 	// 1) 基本结构检查
 	if fs.Info.Title == "" {
-		issues = append(issues, LintIssue{"WARN", "info.title 为空"})
+		issues = append(issues, LintIssue{"WARN", "info.title is empty"})
 	}
 	
 	// Check format compatibility
 	if len(fs.Flow) == 0 && fs.Graph == nil {
-		return append(issues, LintIssue{"ERROR", "flow 或 graph 必须至少指定一个"}), nil
+		return append(issues, LintIssue{"ERROR", "either flow or graph must be specified"}), nil
 	}
 	if len(fs.Flow) > 0 && fs.Graph != nil {
 		return append(issues, LintIssue{"ERROR", "cannot specify both 'flow' and 'graph' - please choose one format"}), nil
@@ -67,10 +67,10 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 	
 	for i, st := range allSteps {
 		if st.Step == "" {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("第 %d 个步骤缺少 step 名称", i+1)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step #%d is missing step name", i+1)})
 		}
 		if _, ok := stepNames[st.Step]; ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("重复的 step 名称：%s", st.Step)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("duplicate step name: %s", st.Step)})
 		}
 		stepNames[st.Step] = struct{}{}
 
@@ -81,16 +81,16 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 
 		svc, op, err := splitCall(st.Call)
 		if err != nil {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s call 不合法：%v", st.Step, err)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s invalid call: %v", st.Step, err)})
 			continue
 		}
 		ops, ok := opIndex[svc]
 		if !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s 引用了未声明的服务：%s", st.Step, svc)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references undeclared service: %s", st.Step, svc)})
 			continue
 		}
 		if _, ok := ops[op]; !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s 引用了服务 %s 中不存在的操作：%s", st.Step, svc, op)})
+			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references non-existent operation %s in service %s", st.Step, op, svc)})
 		}
 	}
 
@@ -118,7 +118,7 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 				for _, v := range collectVarRefs(pst.Input) {
 					rootVar := strings.SplitN(v, ".", 2)[0]
 					if _, ok := parallelVars[rootVar]; !ok {
-						issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s 引用了未知变量 ${%s}", pst.Step, v)})
+						issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references unknown variable ${%s}", pst.Step, v)})
 					}
 				}
 			}
@@ -135,7 +135,7 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 				// 对于嵌套变量引用（如 orderResponse.items），只检查根变量（orderResponse）
 				rootVar := strings.SplitN(v, ".", 2)[0]
 				if _, ok := knownVars[rootVar]; !ok {
-					issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s 引用了未知变量 ${%s}", st.Step, v)})
+					issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references unknown variable ${%s}", st.Step, v)})
 				}
 			}
 			// 将本步骤 output 的 key 视为新的变量名
@@ -152,7 +152,7 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 func splitCall(call string) (service string, operation string, err error) {
 	parts := strings.SplitN(strings.TrimSpace(call), ".", 2)
 	if len(parts) != 2 {
-		return "", "", errors.New("call 必须是 'serviceAlias.operationId' 形式")
+		return "", "", errors.New("call must be in format 'serviceAlias.operationId'")
 	}
 	return parts[0], parts[1], nil
 }

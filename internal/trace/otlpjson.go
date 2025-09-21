@@ -83,12 +83,12 @@ type OTLPTrace struct {
 func LoadFromOTLPJSON(path string) (*Trace, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取 OTLP JSON 文件失败: %w", err)
+		return nil, fmt.Errorf("failed to read OTLP JSON file: %w", err)
 	}
 
 	var otlpTrace OTLPTrace
 	if err := json.Unmarshal(data, &otlpTrace); err != nil {
-		return nil, fmt.Errorf("解析 OTLP JSON 失败: %w", err)
+		return nil, fmt.Errorf("failed to parse OTLP JSON: %w", err)
 	}
 
 	return convertOTLPToTrace(otlpTrace)
@@ -106,7 +106,7 @@ func convertOTLPToTrace(otlpTrace OTLPTrace) (*Trace, error) {
 			for _, otlpSpan := range scopeSpan.Spans {
 				span, err := convertOTLPSpan(otlpSpan, serviceName)
 				if err != nil {
-					return nil, fmt.Errorf("转换 OTLP span 失败: %w", err)
+					return nil, fmt.Errorf("failed to convert OTLP span: %w", err)
 				}
 				spans = append(spans, span)
 			}
@@ -247,11 +247,11 @@ func ValidateOTLPJSON(path string) error {
 
 	var otlpTrace OTLPTrace
 	if err := json.Unmarshal(data, &otlpTrace); err != nil {
-		return fmt.Errorf("JSON 格式无效: %w", err)
+		return fmt.Errorf("invalid JSON format: %w", err)
 	}
 
 	if len(otlpTrace.ResourceSpans) == 0 {
-		return fmt.Errorf("OTLP 文件中没有找到 resourceSpans")
+		return fmt.Errorf("no resourceSpans found in OTLP file")
 	}
 
 	totalSpans := 0
@@ -262,7 +262,7 @@ func ValidateOTLPJSON(path string) error {
 	}
 
 	if totalSpans == 0 {
-		return fmt.Errorf("OTLP 文件中没有找到任何 spans")
+		return fmt.Errorf("no spans found in OTLP file")
 	}
 
 	return nil

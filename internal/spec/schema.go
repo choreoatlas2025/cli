@@ -9,45 +9,45 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ValidateYAMLWithSchema 使用 JSON Schema 验证 YAML 文件
+// ValidateYAMLWithSchema validates YAML file with JSON Schema
 func ValidateYAMLWithSchema(yamlPath, schemaPath string) error {
-	// 读 YAML -> JSON 兼容的 map
+	// Read YAML -> JSON compatible map
 	b, err := os.ReadFile(yamlPath)
 	if err != nil {
-		return fmt.Errorf("读取文件 %s: %w", yamlPath, err)
+		return fmt.Errorf("failed to read file %s: %w", yamlPath, err)
 	}
 	var data any
 	if err := yaml.Unmarshal(b, &data); err != nil {
-		return fmt.Errorf("解析 YAML 失败: %w", err)
+		return fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	// 编译 schema
+	// Compile schema
 	c := jsonschema.NewCompiler()
 	f, err := os.Open(schemaPath)
 	if err != nil {
-		return fmt.Errorf("打开 schema 文件 %s: %w", schemaPath, err)
+		return fmt.Errorf("failed to open schema file %s: %w", schemaPath, err)
 	}
 	defer f.Close()
 
 	schemaID := filepath.Base(schemaPath)
 	if err := c.AddResource(schemaID, f); err != nil {
-		return fmt.Errorf("加载 schema 资源: %w", err)
+		return fmt.Errorf("failed to load schema resource: %w", err)
 	}
 
 	sch, err := c.Compile(schemaID)
 	if err != nil {
-		return fmt.Errorf("编译 schema: %w", err)
+		return fmt.Errorf("failed to compile schema: %w", err)
 	}
 
-	// 校验
+	// Validate
 	if err := sch.Validate(data); err != nil {
-		return fmt.Errorf("schema 校验失败: %w", err)
+		return fmt.Errorf("schema validation failed: %w", err)
 	}
 
 	return nil
 }
 
-// ResolvePath 解析相对于基础文件的路径
+// ResolvePath resolves path relative to base file
 func ResolvePath(basePath, relativePath string) string {
 	if filepath.IsAbs(relativePath) {
 		return relativePath

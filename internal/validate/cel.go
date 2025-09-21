@@ -145,12 +145,12 @@ func EvaluateConditions(
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("不支持或编译失败（%s）: %v", phase, err)
+			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
 		} else if ok {
 			cr.Status = "PASS"
 		} else {
 			cr.Status = "FAIL"
-			cr.Message = "结果为 false"
+			cr.Message = "result is false"
 			passAll = false
 		}
 		results = append(results, cr)
@@ -162,12 +162,12 @@ func EvaluateConditions(
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("不支持或编译失败（%s）: %v", phase, err)
+			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
 		} else if ok {
 			cr.Status = "PASS"
 		} else {
 			cr.Status = "FAIL"
-			cr.Message = "结果为 false"
+			cr.Message = "result is false"
 			passAll = false
 		}
 		results = append(results, cr)

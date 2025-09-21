@@ -190,7 +190,7 @@ func validateWithTimeSequence(fs *spec.FlowSpec, opIndex map[string]map[string]s
 			if matchedIndex >= spanIndex {
 				note := ""
 				if matchedIndex > spanIndex {
-					note = fmt.Sprintf("按时序匹配到第 %d 个 span（存在中间插入 span）", matchedIndex+1)
+					note = fmt.Sprintf("matched span #%d by time sequence (intermediate spans exist)", matchedIndex+1)
 				}
 				
 				// 默认 PASS（顺序已通过）
@@ -207,7 +207,7 @@ func validateWithTimeSequence(fs *spec.FlowSpec, opIndex map[string]map[string]s
 								if sr.Message != "" {
 									sr.Message += " | "
 								}
-								sr.Message += "语义校验未通过"
+								sr.Message += "semantic validation failed"
 							}
 						}
 					}
@@ -221,12 +221,12 @@ func validateWithTimeSequence(fs *spec.FlowSpec, opIndex map[string]map[string]s
 					Step:    st.Step,
 					Call:    st.Call,
 					Status:  "FAIL",
-					Message: "时序倒退：匹配到的 span 早于上一步骤",
+					Message: "temporal regression: matched span occurred before previous step",
 				})
 				okAll = false
 			}
 		} else {
-			results = append(results, StepResult{Step: st.Step, Call: st.Call, Status: "FAIL", Message: "未在 trace 中匹配到对应 span"})
+			results = append(results, StepResult{Step: st.Step, Call: st.Call, Status: "FAIL", Message: "no matching span found in trace"})
 			okAll = false
 		}
 	}
@@ -371,7 +371,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 			for _, cond := range conditions {
 				if cond.Status == "FAIL" {
 					status = "FAIL"
-					message = "语义校验未通过"
+					message = "semantic validation failed"
 					okAll = false
 					break
 				}
@@ -421,12 +421,12 @@ func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.G
 		case CausalityStrict:
 			// Check parent-child relationship
 			if !isParentChild(predSpan, nodeSpan) {
-				return fmt.Errorf("node %s 应该是 %s 的子节点（strict 模式）", node.ID, predID)
+				return fmt.Errorf("node %s should be child of %s (strict mode)", node.ID, predID)
 			}
 		case CausalityTemporal:
 			// Check temporal ordering: predecessor should start before or at the same time as current
 			if nodeSpan.StartNanos < predSpan.StartNanos {
-				return fmt.Errorf("node %s 开始时间早于前驱节点 %s（temporal 模式）", node.ID, predID)
+				return fmt.Errorf("node %s starts before predecessor %s (temporal mode)", node.ID, predID)
 			}
 		}
 	}

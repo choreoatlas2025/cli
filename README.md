@@ -1,6 +1,12 @@
 # ChoreoAtlas CLI
 
+[![Version](https://img.shields.io/github/v/tag/choreoatlas2025/cli?label=version)](https://github.com/choreoatlas2025/cli/releases)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/docker/v/choreoatlas/cli?label=docker)](https://hub.docker.com/r/choreoatlas/cli)
+
 **Map. Verify. Steer** cross-service choreography
+
+> ⚠️ **Beta Release**: v0.2.0-ce.beta.1 - Community Edition with zero telemetry
 
 ChoreoAtlas is a Contract-as-Code platform for interactive logic governance, following the "Discover-Specify-Guide" closed-loop concept. It supports dual contract mode (ServiceSpec & FlowSpec) and provides Atlas Scout (Discovery), Atlas Proof (Verification), and Atlas Pilot (Guidance) components.
 
@@ -10,11 +16,11 @@ ChoreoAtlas is a Contract-as-Code platform for interactive logic governance, fol
 
 #### Docker (Recommended)
 ```bash
-# Public access via Docker Hub
+# Public access via Docker Hub (currently v0.1.5-ce, v0.2.0 coming soon)
 docker run --rm choreoatlas/cli:latest --help
 
-# Or via GitHub Container Registry (requires authentication)
-docker run --rm ghcr.io/choreoatlas2025/cli:latest --help
+# Run with local files mounted
+docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest lint --flow /workspace/your.flowspec.yaml
 ```
 
 #### Homebrew (Coming Soon)
@@ -58,6 +64,14 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
   --report-format html --report-out /workspace/report.html
 ```
 
+## 🔒 Community Edition (CE) Features
+
+### Zero Telemetry Guarantee
+- **No Data Collection**: Absolutely no telemetry, analytics, or usage tracking
+- **Completely Offline**: Works without any network connections
+- **Privacy First**: Your contracts and traces never leave your machine
+- **Verifiable**: Check with `strings choreoatlas | grep telemetry` (returns nothing)
+
 ## ✨ Core Features
 
 ### Contract-as-Code Approach
@@ -70,12 +84,13 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
 - **Atlas Proof** (`validate`): Verify choreography matches actual execution
 - **Atlas Pilot** (`lint`): Static validation and guidance
 
-### Enterprise Features (Community Edition)
+### Validation Features
 - **JSON Schema Validation**: Structured validation of FlowSpec and ServiceSpec formats
-- **Multiple Report Formats**: JSON, JUnit XML, and HTML reports for seamless CI integration
-- **Trace-based Discovery**: Semi-automatic FlowSpec generation from trace.json
-- **Temporal Validation**: Timestamp-based step sequence verification
-- **CI/CD Integration**: Non-zero exit codes for pipeline integration
+- **Multiple Report Formats**: JSON, JUnit XML, and HTML reports with CE badge
+- **Trace-based Discovery**: Automatic dual contract generation from trace.json
+- **Temporal & Causal Validation**: Step sequence and dependency verification
+- **CI/CD Integration**: Standardized exit codes for pipeline integration
+- **Baseline Gating**: Coverage thresholds and condition pass rates
 
 ## 📋 Contract Structure
 
@@ -217,18 +232,31 @@ make clean
 └── schemas/                 # JSON Schema definitions
 ```
 
-## 📦 Edition Features
+## 📦 Edition Comparison
 
-| Edition | Features |
-|---------|----------|
-| **Community Edition** | Basic Lint + File-based Validate |
-| **Pro-Free** | + OTLP Collection |
-| **Pro-Privacy** | + PII Masking |
-| **Cloud** | + Remote Storage & Collaboration |
+| Feature | Community (CE) | Pro-Free | Pro-Privacy | Cloud |
+|---------|---------------|----------|-------------|-------|
+| **Core Validation** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Discovery (Atlas Scout)** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **HTML/JSON/JUnit Reports** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Telemetry** | ❌ Never | ⚠️ Optional | ❌ Never | ✅ Required |
+| **OTLP Import** | ❌ | ✅ | ✅ | ✅ |
+| **PII Masking** | ❌ | ❌ | ✅ | ✅ |
+| **Advanced Baseline** | ❌ | ✅ | ✅ | ✅ |
+| **Team Collaboration** | ❌ | ❌ | ❌ | ✅ |
+| **Price** | Free Forever | $19/user/mo | $39/user/mo | Custom |
+
+## 📋 System Requirements
+
+- **Operating Systems**: Linux, macOS, Windows
+- **Architecture**: amd64, arm64
+- **For Building**: Go 1.21+ required
+- **Disk Space**: ~50MB for binary
+- **Network**: Not required (fully offline capable)
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please check our [Issues](https://github.com/choreoatlas2025/cli/issues) page for areas where you can help.
 
 ## 📄 License
 
@@ -236,10 +264,10 @@ Apache 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
-- **Documentation**: https://choreoatlas.io (Coming Soon)
-- **GitHub**: https://github.com/choreoatlas2025/cli
-- **Docker**: https://github.com/choreoatlas2025/cli/pkgs/container/cli
-- **Issues**: https://github.com/choreoatlas2025/cli/issues
+- **GitHub Repository**: https://github.com/choreoatlas2025/cli
+- **Releases**: https://github.com/choreoatlas2025/cli/releases
+- **Docker Hub**: https://hub.docker.com/r/choreoatlas/cli
+- **Issues & Feature Requests**: https://github.com/choreoatlas2025/cli/issues
 - **Discussions**: https://github.com/choreoatlas2025/cli/discussions
 
 ---

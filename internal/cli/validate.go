@@ -54,7 +54,7 @@ func runValidate(args []string) {
 	}
 	for _, is := range issues {
 		if is.Level == "ERROR" {
-			fmt.Println("Lint 存在 ERROR，终止 Validate")
+			fmt.Println("Lint contains ERROR, terminating Validate")
 			os.Exit(exitcode.InputError)
 		}
 	}

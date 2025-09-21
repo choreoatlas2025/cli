@@ -24,11 +24,11 @@ type Span struct {
 func LoadFromFile(path string) (*Trace, error) {
 	tb, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取 trace 文件失败: %w", err)
+		return nil, fmt.Errorf("failed to read trace file: %w", err)
 	}
 	var tr Trace
 	if err := json.Unmarshal(tb, &tr); err != nil {
-		return nil, fmt.Errorf("解析 trace 数据失败: %w", err)
+		return nil, fmt.Errorf("failed to parse trace data: %w", err)
 	}
 	return &tr, nil
 }

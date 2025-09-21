@@ -9,38 +9,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ValidateYAMLWithSchemaFS 使用嵌入式 JSON Schema 验证 YAML 文件（推荐）
+// ValidateYAMLWithSchemaFS validates YAML file with embedded JSON Schema (recommended)
 func ValidateYAMLWithSchemaFS(yamlPath string, fsys fs.FS, schemaName string) error {
-	// 读 YAML -> JSON 兼容的 map
+	// Read YAML -> JSON compatible map
 	b, err := os.ReadFile(yamlPath)
 	if err != nil {
-		return fmt.Errorf("读取文件 %s: %w", yamlPath, err)
+		return fmt.Errorf("failed to read file %s: %w", yamlPath, err)
 	}
 	var data any
 	if err := yaml.Unmarshal(b, &data); err != nil {
-		return fmt.Errorf("解析 YAML 失败: %w", err)
+		return fmt.Errorf("failed to parse YAML: %w", err)
 	}
 	
-	// 编译 schema
+	// Compile schema
 	c := jsonschema.NewCompiler()
 	f, err := fsys.Open(schemaName)
 	if err != nil {
-		return fmt.Errorf("打开嵌入式 schema %s: %w", schemaName, err)
+		return fmt.Errorf("failed to open embedded schema %s: %w", schemaName, err)
 	}
 	defer f.Close()
 	
 	if err := c.AddResource(schemaName, f); err != nil {
-		return fmt.Errorf("加载嵌入式 schema 资源: %w", err)
+		return fmt.Errorf("failed to load embedded schema resource: %w", err)
 	}
 	
 	sch, err := c.Compile(schemaName)
 	if err != nil {
-		return fmt.Errorf("编译嵌入式 schema: %w", err)
+		return fmt.Errorf("failed to compile embedded schema: %w", err)
 	}
 	
-	// 校验
+	// Validate
 	if err := sch.Validate(data); err != nil {
-		return fmt.Errorf("schema 校验失败: %w", err)
+		return fmt.Errorf("schema validation failed: %w", err)
 	}
 	
 	return nil

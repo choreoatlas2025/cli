@@ -170,9 +170,9 @@ func ValidateAndApply(policyPath string, tr *trace.Trace) (*trace.Trace, error) 
 	return Apply(compiled, tr)
 }
 
-// ShowMaskingPreview 显示脱敏预览（调试用）
+// ShowMaskingPreview displays masking preview (for debugging)
 func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
-	fmt.Printf("脱敏预览 (显示前 %d 个 spans):\n", maxSpans)
+	fmt.Printf("Masking preview (showing first %d spans):\n", maxSpans)
 	fmt.Println(strings.Repeat("=", 60))
 
 	count := 0
@@ -182,7 +182,7 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 		}
 
 		fmt.Printf("\nSpan: %s.%s\n", span.Service, span.Name)
-		fmt.Println("原始数据:")
+		fmt.Println("Original data:")
 		
 		// 格式化输出原始 attributes
 		originalJSON, _ := json.MarshalIndent(span.Attributes, "  ", "  ")
@@ -190,7 +190,7 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 
 		// 应用脱敏
 		maskedSpan := ApplyToSpan(policy, span)
-		fmt.Println("脱敏后:")
+		fmt.Println("After masking:")
 		
 		maskedJSON, _ := json.MarshalIndent(maskedSpan.Attributes, "  ", "  ")
 		fmt.Printf("  %s\n", maskedJSON)
@@ -199,7 +199,7 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 	}
 
 	if len(tr.Spans) > maxSpans {
-		fmt.Printf("\n... 还有 %d 个 spans 未显示\n", len(tr.Spans)-maxSpans)
+		fmt.Printf("\n... %d more spans not shown\n", len(tr.Spans)-maxSpans)
 	}
 }
 

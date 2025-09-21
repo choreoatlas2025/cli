@@ -29,11 +29,11 @@ type ServiceOperation struct {
 func LoadServiceSpec(path string) (*ServiceSpecFile, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取 servicespec 失败: %w", err)
+		return nil, fmt.Errorf("failed to read servicespec: %w", err)
 	}
 	var ss ServiceSpecFile
 	if err := yaml.Unmarshal(b, &ss); err != nil {
-		return nil, fmt.Errorf("解析 servicespec 失败: %w", err)
+		return nil, fmt.Errorf("failed to parse servicespec: %w", err)
 	}
 	return &ss, nil
 }
@@ -45,7 +45,7 @@ func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
 	
 	// 确保输出目录存在
 	if err := os.MkdirAll(outDir, 0755); err != nil {
-		return fmt.Errorf("创建输出目录失败: %w", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 	
 	// 为每个服务生成 ServiceSpec 文件
