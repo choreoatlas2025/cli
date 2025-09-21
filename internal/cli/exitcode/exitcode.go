@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
+// SPDX-License-Identifier: Apache-2.0
+
 // Package exitcode defines standardized exit codes for the ChoreoAtlas CLI.
 // These codes follow Unix conventions and provide clear semantics for CI/CD integration.
 package exitcode

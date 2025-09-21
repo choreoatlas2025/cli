@@ -31,3 +31,6 @@ Thumbs.db
 # 覆盖率报告
 coverage.out
 coverage.htmldist/
+
+# Claude AI 配置文件
+CLAUDE.md
