@@ -1,36 +1,66 @@
 # ChoreoAtlas CLI
 
-[![Version](https://img.shields.io/github/v/tag/choreoatlas2025/cli?label=version)](https://github.com/choreoatlas2025/cli/releases)
+[![Release](https://img.shields.io/github/v/release/choreoatlas2025/cli?display_name=tag&include_prereleases&label=release)](https://github.com/choreoatlas2025/cli/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/docker/v/choreoatlas/cli?label=docker)](https://hub.docker.com/r/choreoatlas/cli)
 
-**Map. Verify. Steer** cross-service choreography
+Map. Verify. Steer your cross-service choreography — a developer-friendly, Swiss‑army‑knife style CLI for Contract‑as‑Code.
 
-> ⚠️ **Beta Release**: v0.2.0-ce.beta.1 - Community Edition with zero telemetry
+This is the Community Edition (CE): zero telemetry, fully offline.
 
-ChoreoAtlas is a Contract-as-Code platform for interactive logic governance, following the "Discover-Specify-Guide" closed-loop concept. It supports dual contract mode (ServiceSpec & FlowSpec) and provides Atlas Scout (Discovery), Atlas Proof (Verification), and Atlas Pilot (Guidance) components.
+ChoreoAtlas is a Contract‑as‑Code platform for interactive logic governance following the Discover → Specify → Guide loop. It supports dual contracts (FlowSpec + ServiceSpec) and provides:
+- Atlas Scout: discover specs from trace data
+- Atlas Proof: validate choreography against runtime behavior
+- Atlas Pilot: static linting and guidance
+
+Whitepaper: see `../whitepaper/ChoreoAtlas-Whitepaper-1.1.zh-CN.md`
+
+Looking for Chinese? See README.zh-CN.md
 
 ## 🚀 Quick Start
 
 ### Installation
 
-#### Docker (Recommended)
+#### Homebrew (macOS & Linux)
 ```bash
-# Public access via Docker Hub (currently v0.1.5-ce, v0.2.0 coming soon)
-docker run --rm choreoatlas/cli:latest --help
-
-# Run with local files mounted
-docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest lint --flow /workspace/your.flowspec.yaml
+brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas
+brew upgrade choreoatlas2025/homebrew-choreoatlas/choreoatlas  # 更新到最新版
 ```
 
-#### Homebrew (Coming Soon)
+The formula installs both `choreoatlas` and a `ca` helper symlink.
+
+#### Shell installer (macOS/Linux)
 ```bash
-brew tap choreoatlas2025/tap
-brew install choreoatlas
+curl -fsSL https://raw.githubusercontent.com/choreoatlas2025/cli/main/scripts/install.sh -o choreoatlas-install.sh
+chmod +x choreoatlas-install.sh
+./choreoatlas-install.sh            # 自动选择 /opt/homebrew/bin 或 /usr/local/bin
+# Flags: --version vX.Y.Z-ce, --force, --no-symlink
 ```
 
-#### Manual Download
-Download the appropriate binary from our [releases page](https://github.com/choreoatlas2025/cli/releases) and add it to your PATH.
+#### PowerShell installer (Windows)
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/choreoatlas2025/cli/main/scripts/install.ps1 -OutFile choreoatlas-install.ps1
+pwsh ./choreoatlas-install.ps1      # 支持 -Version, -Force, -NoSymlink
+```
+
+#### Docker / GHCR
+```bash
+# Pin to a specific release tag
+docker run --rm choreoatlas/cli:vX.Y.Z-ce version
+docker run --rm ghcr.io/choreoatlas2025/cli:vX.Y.Z-ce version
+
+# Or track the moving latest tag
+docker run --rm choreoatlas/cli:latest version
+docker run --rm ghcr.io/choreoatlas2025/cli:latest version
+```
+
+#### Manual download
+1. Download the asset matching your OS/arch from [GitHub Releases](https://github.com/choreoatlas2025/cli/releases) (pattern: `choreoatlas_vX.Y.Z-ce_<os>_<arch>.tar.gz|zip`).
+2. Download `SHA256SUMS.txt` from the same release and verify the archive.
+3. Extract the archive and move `choreoatlas` into a directory on your PATH (`/opt/homebrew/bin`, `/usr/local/bin`, or `%LOCALAPPDATA%\ChoreoAtlas\bin`).
+4. Optionally create your own alias/symlink if you skipped the installers: `ln -s choreoatlas /usr/local/bin/ca`.
+
+Run `choreoatlas version` after installation to confirm the build and edition suffix (`-ce`).
 
 ### Basic Usage
 
@@ -44,8 +74,11 @@ choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --tra
 # Generate reports (JSON, JUnit, HTML)
 choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json --report-format html --report-out report.html
 
-# Discover FlowSpec from trace data
-choreoatlas discover --trace examples/traces/successful-order.trace.json --out discovered.yaml
+# Discover dual contracts from trace data (FlowSpec + ServiceSpec files)
+choreoatlas discover \
+  --trace examples/traces/successful-order.trace.json \
+  --out discovered.flowspec.yaml \
+  --out-services ./services
 
 # CI gate mode (combines lint + validate with proper exit codes)
 choreoatlas ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
@@ -63,6 +96,51 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
   --trace /workspace/examples/traces/successful-order.trace.json \
   --report-format html --report-out /workspace/report.html
 ```
+
+### TL;DR Cheat Sheet
+
+Common one‑liners for day‑to‑day work:
+
+```bash
+# Lint your FlowSpec (uses embedded JSON Schemas)
+ca lint --flow .flowspec.yaml
+
+# Validate against a trace with semantic checks and temporal causality
+ca validate --flow .flowspec.yaml --trace trace.json
+
+# Tighten the gate: require 100% steps and 100% conditions
+ca validate --flow .flowspec.yaml --trace trace.json \
+  --threshold-steps 1.0 --threshold-conds 1.0 --skip-as-fail
+
+# Record a baseline from current run
+ca baseline record --flow .flowspec.yaml --trace trace.json --out baseline.json
+
+# Gate with thresholds and an existing baseline; tolerate missing baseline by using absolute thresholds
+ca validate --flow .flowspec.yaml --trace trace.json \
+  --baseline ci/baseline.json --baseline-missing treat-as-absolute \
+  --threshold-steps 0.9 --threshold-conds 0.95
+
+# Generate an HTML report for humans (also supports json|junit)
+ca validate --flow .flowspec.yaml --trace trace.json \
+  --report-format html --report-out report.html
+
+# Discover specs from a trace (FlowSpec + ServiceSpec files)
+ca discover --trace trace.json --out discovered.flowspec.yaml --out-services ./services
+
+# Run lint + validate in one go (CI gate)
+ca ci-gate --flow .flowspec.yaml --trace trace.json
+
+# Run validation on all traces in a folder
+for f in traces/*.json; do ca validate --flow .flowspec.yaml --trace "$f"; done
+```
+
+## 📦 Versions & Distribution
+
+- **Tags & releases**: all binaries ship as `vX.Y.Z-ce`; the suffix is visible in `choreoatlas version` output.
+- **Installers & Homebrew**: both pull the same release artifacts and create the optional `ca` helper when safe.
+- **Containers**: multi-arch manifests are published to both Docker Hub (`choreoatlas/cli`) and GHCR (`ghcr.io/choreoatlas2025/cli`) with matching `vX.Y.Z-ce` and `latest` tags.
+- **Checksums**: every release includes `SHA256SUMS.txt` for integrity verification.
+- **Privacy**: Community Edition is permanently zero-telemetry — see `docs/privacy.md` for verification steps.
 
 ## 🔒 Community Edition (CE) Features
 
@@ -94,7 +172,7 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
 
 ## 📋 Contract Structure
 
-### FlowSpec Format (Graph - Recommended)
+### FlowSpec Format (Graph - recommended)
 ```yaml
 info:
   title: "Order Fulfillment Process"
@@ -119,7 +197,7 @@ graph:
         reservationId: "response.reservationId"
 ```
 
-### FlowSpec Format (Sequential - Legacy)
+### FlowSpec Format (Sequential - legacy)
 ```yaml
 info:
   title: "Order Fulfillment Process"
@@ -171,6 +249,50 @@ choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
 choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
 ```
 
+## 🧰 CLI Reference
+
+Commands and important flags (defaults shown where relevant):
+
+```text
+choreoatlas lint
+  --flow string          FlowSpec file path (default ".flowspec.yaml")
+  --schema               Enable JSON Schema strict validation (default true)
+
+choreoatlas validate
+  --flow string          FlowSpec file path (default ".flowspec.yaml")
+  --trace string         trace.json file path (required)
+  --semantic bool        Enable semantic validation (CEL) (default true)
+  --causality string     Causality mode: strict|temporal|off (default "temporal")
+  --causality-tolerance int  Causality tolerance in ms (default 50)
+  --baseline string      Baseline file path (optional)
+  --baseline-missing string  Strategy when baseline missing: fail|treat-as-absolute (default "fail")
+  --threshold-steps float    Step coverage threshold (default 0.9)
+  --threshold-conds float    Condition pass threshold (default 0.95)
+  --skip-as-fail        Treat SKIP conditions as FAIL
+  --report-format string Report format: json|junit|html (optional)
+  --report-out string    Report output path (required when using --report-format)
+
+choreoatlas discover
+  --trace string         trace.json file path (required)
+  --out string           FlowSpec output (default "discovered.flowspec.yaml")
+  --out-services string  ServiceSpec output directory (default "./services")
+  --title string         FlowSpec title
+
+choreoatlas ci-gate
+  --flow string          FlowSpec file path
+  --trace string         trace.json file path
+
+choreoatlas baseline record
+  --flow string          FlowSpec file path (default ".flowspec.yaml")
+  --trace string         trace.json file path (required)
+  --out string           Baseline output file (default "baseline.json")
+```
+
+Notes:
+- Default FlowSpec is `.flowspec.yaml` in the current directory.
+- ServiceSpec paths in `services.*.spec` are resolved relative to the FlowSpec file.
+- Graph (DAG) format is recommended; legacy `flow:` remains supported.
+
 ## 🔧 CI/CD Integration
 
 ### GitHub Actions
@@ -193,6 +315,56 @@ choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --tra
 - **JSON**: Structured data for programmatic processing
 - **JUnit XML**: Direct CI/CD integration
 - **HTML**: Human-readable reports with timeline visualization
+
+## 🧪 Trace Input Format
+
+CE expects a simple JSON file shaped like:
+
+```json
+{
+  "spans": [
+    {
+      "name": "createOrder",
+      "service": "orderService",
+      "startNanos": 1693910000000000000,
+      "endNanos": 1693910000100000000,
+      "attributes": {"response.status": 201}
+    }
+  ]
+}
+```
+
+Causality checks can use temporal ordering by default, or strict parent/child when your attributes include OTLP‑style `otlp.parent_span_id` and `otlp.span_id` fields.
+
+## 🧩 Common Workflows
+
+1) Start from a trace → discover contracts → refine → validate
+```bash
+ca discover --trace traces/happy.json --out flow.flowspec.yaml --out-services ./services
+# Edit and refine the generated FlowSpec/ServiceSpec files
+ca lint --flow flow.flowspec.yaml
+ca validate --flow flow.flowspec.yaml --trace traces/happy.json --report-format html --report-out report.html
+```
+
+2) Establish a baseline and add a gate
+```bash
+ca baseline record --flow flow.flowspec.yaml --trace traces/happy.json --out ci/baseline.json
+ca validate --flow flow.flowspec.yaml --trace traces/regression.json \
+  --baseline ci/baseline.json --threshold-steps 0.9 --threshold-conds 0.95
+```
+
+3) Batch validate
+```bash
+for f in traces/*.json; do ca validate --flow flow.flowspec.yaml --trace "$f"; done
+```
+
+## 🧱 Troubleshooting
+
+- “flowspec cannot have both 'graph' and 'flow' fields”: choose one format.
+- “no matching span found in trace”: verify `service.operation` matches `FlowSpec` and trace ordering/causality settings.
+- “DAG structure validation failed”: fix cycles, missing nodes, or unreachable nodes in `graph`.
+- Baseline file missing: add `--baseline-missing treat-as-absolute` to rely on thresholds only.
+- Relative ServiceSpec paths: they are resolved relative to the FlowSpec file location.
 
 ## 🏗️ Development
 
@@ -272,4 +444,4 @@ Apache 2.0 - see [LICENSE](LICENSE) file for details.
 
 ---
 
-*ChoreoAtlas CLI - Map, Verify, and Steer your service choreography with Contract-as-Code*
+*ChoreoAtlas CLI — Map, Verify, and Steer your service choreography with Contract‑as‑Code*

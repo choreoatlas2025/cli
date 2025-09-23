@@ -2,195 +2,124 @@
 
 ## Overview
 
-ChoreoAtlas CLI Community Edition (CE) can be installed through multiple channels. This is the **zero-telemetry** edition with no data collection, no network calls, and complete offline capability.
+ChoreoAtlas CLI Community Edition (CE) ships as a **single, zero-telemetry channel**. Every artifact advertises the same `-ce` suffix so you can verify exactly which build you are running.
 
-## Installation Methods
+- Git tags and GitHub Releases: `vX.Y.Z-ce`
+- Homebrew formula: `choreoatlas2025/homebrew-choreoatlas/choreoatlas`
+- Installers: `scripts/install.sh` (macOS/Linux) and `scripts/install.ps1` (Windows)
+- Containers: `choreoatlas/cli` and `ghcr.io/choreoatlas2025/cli` multi-arch manifests tagged `vX.Y.Z-ce` and `latest`
+- Checksums: `SHA256SUMS.txt` accompanies every release
 
-### Method 1: Docker (Recommended)
+The CE build is permanently offline and telemetry-free. See [docs/privacy.md](privacy.md) for verification steps.
 
-```bash
-# Pull from Docker Hub
-docker pull choreoatlas/cli:latest
-
-# Run directly
-docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest lint --flow /workspace/flow.yaml
-
-# Create an alias for convenience
-alias choreoatlas='docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest'
-```
-
-### Method 2: Homebrew (macOS/Linux)
+## Method 1: Homebrew (macOS & Linux)
 
 ```bash
-# Add the ChoreoAtlas tap
-brew tap choreoatlas2025/tap
-
-# Install ChoreoAtlas CLI
-brew install choreoatlas
-
-# Verify installation
-choreoatlas version
+brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas
+# Update later
+brew upgrade choreoatlas2025/homebrew-choreoatlas/choreoatlas
 ```
 
-### Method 3: Direct Download
+What you get:
+- `choreoatlas` binary in your Homebrew prefix
+- `ca` helper symlink (skips creation if `ca` already exists and is not pointing to ChoreoAtlas)
+- Automatic updates via `brew upgrade`
 
-Download the appropriate binary for your platform from the [releases page](https://github.com/choreoatlas2025/cli/releases).
-
-#### Linux
-```bash
-# Download (replace VERSION with actual version number)
-curl -L https://github.com/choreoatlas2025/cli/releases/download/vVERSION/choreoatlas-linux-amd64 -o choreoatlas
-
-# Make executable
-chmod +x choreoatlas
-
-# Move to PATH
-sudo mv choreoatlas /usr/local/bin/
-
-# Verify
-choreoatlas version
-```
-
-#### macOS
-```bash
-# Download (replace VERSION with actual version number)
-curl -L https://github.com/choreoatlas2025/cli/releases/download/vVERSION/choreoatlas-darwin-amd64 -o choreoatlas
-
-# Make executable
-chmod +x choreoatlas
-
-# Move to PATH
-sudo mv choreoatlas /usr/local/bin/
-
-# Verify
-choreoatlas version
-```
-
-#### Windows
-1. Download `choreoatlas-windows-amd64.exe` from the [releases page](https://github.com/choreoatlas2025/cli/releases)
-2. Rename to `choreoatlas.exe`
-3. Add to your PATH environment variable
-4. Open a new terminal and verify with `choreoatlas version`
-
-### Method 4: Build from Source
+## Method 2: Shell Installer (macOS/Linux)
 
 ```bash
-# Clone the repository
-git clone https://github.com/choreoatlas2025/cli.git
-cd cli
-
-# Build
-go build -o bin/choreoatlas ./cmd/choreoatlas/
-
-# Install to PATH
-sudo cp bin/choreoatlas /usr/local/bin/
-
-# Verify
-choreoatlas version
+curl -fsSL https://raw.githubusercontent.com/choreoatlas2025/cli/main/scripts/install.sh -o choreoatlas-install.sh
+chmod +x choreoatlas-install.sh
+./choreoatlas-install.sh                # auto-picks /opt/homebrew/bin → /usr/local/bin → $HOME/.local/bin
 ```
+
+Flags:
+- `--version vX.Y.Z-ce` – pin to a specific release (default: latest)
+- `--force` – overwrite an existing `ca` helper if it points elsewhere
+- `--no-symlink` – skip creating the `ca` helper entirely
+
+The script downloads the matching archive, verifies it with `SHA256SUMS.txt`, and installs to the first writable directory in the priority list `/opt/homebrew/bin` (Apple Silicon), `/usr/local/bin`, then `$HOME/.local/bin`.
+
+## Method 3: PowerShell Installer (Windows)
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/choreoatlas2025/cli/main/scripts/install.ps1 -OutFile choreoatlas-install.ps1
+pwsh -ExecutionPolicy Bypass -File choreoatlas-install.ps1
+```
+
+- Default install paths: `%ProgramFiles%\ChoreoAtlas` (if writable) falling back to `%LOCALAPPDATA%\ChoreoAtlas\bin`
+- Helper creation: attempts `ca.exe` symbolic link, falls back to `ca.cmd` if symlinks are not permitted
+- Flags: `-Version vX.Y.Z-ce`, `-Force`, `-NoSymlink`
+
+## Method 4: Containers (Docker Hub & GHCR)
+
+```bash
+# Docker Hub
+docker run --rm choreoatlas/cli:latest version
+
+# GitHub Container Registry
+docker run --rm ghcr.io/choreoatlas2025/cli:latest version
+```
+
+Both registries publish multi-arch (`linux/amd64`, `linux/arm64`) images with matching `vX.Y.Z-ce` manifests. Mount local files to `/workspace` for linting/validation workflows.
+
+## Method 5: Manual Download
+
+1. Open the [GitHub Releases page](https://github.com/choreoatlas2025/cli/releases).
+2. Download the archive matching your OS/architecture (`choreoatlas_vX.Y.Z-ce_<os>_<arch>.tar.gz` or `.zip`).
+3. Download `SHA256SUMS.txt` from the same release.
+4. Verify integrity:
+   ```bash
+   grep "choreoatlas_vX.Y.Z-ce_darwin_arm64.tar.gz" SHA256SUMS.txt > checksum.txt
+   shasum -a 256 -c checksum.txt
+   ```
+5. Extract the archive and move `choreoatlas` to a directory on your `PATH` (`/opt/homebrew/bin`, `/usr/local/bin`, or `%LOCALAPPDATA%\ChoreoAtlas\bin`).
+6. Optionally create a helper symlink or wrapper (`ln -s choreoatlas /usr/local/bin/ca`).
 
 ## Verify Installation
 
-After installation, verify the CLI is working correctly:
-
 ```bash
-# Check version (should show vX.Y.Z-ce)
 choreoatlas version
 
-# Expected output:
-# choreoatlas v0.7.0-ce
+# Expected fields
+# choreoatlas vX.Y.Z-ce
 # Edition: Community Edition (CE)
-# Git Commit: xxxxxxx
-# Build Time: 2024-01-20T10:00:00Z
-# Go Version: go1.21.0
-# Platform: darwin/amd64
-
-# Test with example
-choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
+# Git Commit: <hash>
+# Build Time: <timestamp>
+# Go Version: go1.24.x
+# Platform: darwin/arm64
 ```
 
-## Command Aliases
-
-For convenience, `ca` is available as a shorter alias:
-
-```bash
-# These are equivalent
-choreoatlas lint --flow flow.yaml
-ca lint --flow flow.yaml
+For Windows PowerShell:
+```powershell
+choreoatlas version
 ```
+
+## Helper Command (`ca`)
+
+- Homebrew and the installers create a `ca` helper that mirrors `choreoatlas` when it does not overwrite an existing binary.
+- Use `--no-symlink`/`-NoSymlink` to skip creation, or `--force`/`-Force` to replace an existing helper.
+- Manual installs can add the helper later with `ln -s choreoatlas /usr/local/bin/ca` (macOS/Linux) or by creating a `ca.cmd` wrapper on Windows.
 
 ## Privacy & Zero Telemetry
 
-**ChoreoAtlas CE is a zero-telemetry edition:**
-
-- ✅ **No data collection**: The CE edition collects absolutely no usage data
-- ✅ **No network calls**: Operates completely offline, no external API calls
-- ✅ **No tracking**: No user identification, no analytics, no metrics
-- ✅ **Fully private**: All processing happens locally on your machine
-- ✅ **Air-gap ready**: Can be used in isolated environments without internet
-
-### Verification
-
-You can verify the binary has no telemetry dependencies:
-
-```bash
-# Check for telemetry-related symbols (should return nothing)
-nm choreoatlas | grep -i telemetry
-nm choreoatlas | grep -i analytics
-nm choreoatlas | grep -i track
-
-# Check for network-related imports (only standard library)
-go version -m choreoatlas | grep -E "sentry|datadog|newrelic|elastic"
-```
-
-## System Requirements
-
-- **Operating Systems**: Linux, macOS, Windows
-- **Architecture**: amd64, arm64
-- **Memory**: 256MB minimum
-- **Disk Space**: 50MB for binary
-- **Runtime**: No external dependencies required
-
-## Configuration
-
-ChoreoAtlas CE requires no configuration to start using. All features work out-of-the-box:
-
-```bash
-# No config needed - just run
-choreoatlas lint --flow myflow.yaml
-choreoatlas validate --flow myflow.yaml --trace trace.json
-```
-
-## Getting Started
-
-1. Install using one of the methods above
-2. Create or use existing FlowSpec files
-3. Run validation:
-   ```bash
-   choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
-   ```
+ChoreoAtlas CE never makes outbound network calls, collects usage data, or embeds telemetry SDKs. For verification steps (binary inspection, network sniffing, source audit), see [docs/privacy.md](privacy.md).
 
 ## Troubleshooting
 
-### "Command not found" after installation
-- Ensure the binary is in your PATH
-- Try using the full path to the binary
-- On macOS, you may need to allow the binary in Security settings
-
-### "Permission denied" on Linux/macOS
-- Make the binary executable: `chmod +x choreoatlas`
-- If installing to `/usr/local/bin`, use `sudo`
-
-### Docker volume mounting issues
-- Use absolute paths for volume mounts
-- Ensure the local directory exists and has proper permissions
+- **Permission denied / cannot write to install directory**: rerun with `sudo ./choreoatlas-install.sh` or let the script fall back to `$HOME/.local/bin`.
+- **Existing `ca` command**: rerun with `--force` or `--no-symlink` to control helper creation.
+- **Checksum mismatch**: redownload both the archive and `SHA256SUMS.txt`; ensure proxies do not rewrite downloads.
+- **Command not found after install**: confirm the target directory is on your `PATH`. For `$HOME/.local/bin`, add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile.
+- **PowerShell execution policy**: use `-ExecutionPolicy Bypass` or run from an elevated PowerShell session.
+- **Docker volume issues**: mount absolute paths, e.g. `-v "$(pwd)":/workspace` on macOS/Linux.
 
 ## Support
 
-- **Documentation**: [GitHub Wiki](https://github.com/choreoatlas2025/cli/wiki)
-- **Issues**: [GitHub Issues](https://github.com/choreoatlas2025/cli/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/choreoatlas2025/cli/discussions)
+- **Documentation**: https://github.com/choreoatlas2025/cli/docs
+- **Issues**: https://github.com/choreoatlas2025/cli/issues
+- **Discussions**: https://github.com/choreoatlas2025/cli/discussions
 
 ## License
 
-Apache 2.0 - See [LICENSE](https://github.com/choreoatlas2025/cli/blob/main/LICENSE) for details.
+Apache 2.0 – see [LICENSE](https://github.com/choreoatlas2025/cli/blob/main/LICENSE) for details.

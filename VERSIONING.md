@@ -2,92 +2,65 @@
 
 ## Version Format
 
-The project follows Semantic Versioning with edition qualifiers:
+ChoreoAtlas CE uses a single semantic versioning channel with an explicit edition suffix:
 
 ```
-v{MAJOR}.{MINOR}.{PATCH}[-{EDITION}][.{PRERELEASE}]
+v{MAJOR}.{MINOR}.{PATCH}-ce[.rc.N]
 ```
 
-### Components
+- `MAJOR`, `MINOR`, `PATCH`: follow SemVer semantics.
+- `ce`: denotes the Community Edition build (zero telemetry, offline).
+- Optional `.rc.N`: release candidates prior to a stable cut. We currently avoid other prerelease labels; betas are issued as RCs when needed.
 
-- **MAJOR**: Breaking API changes
-- **MINOR**: New features, backwards compatible
-- **PATCH**: Bug fixes, backwards compatible
-- **EDITION**: Product edition identifier
-  - `ce` - Community Edition
-  - `pro` - Professional Edition (includes Pro-Free and Pro-Privacy)
-  - `cloud` - Cloud Edition
-- **PRERELEASE**: Optional pre-release identifier
-  - `alpha.N` - Alpha releases
-  - `beta.N` - Beta releases
-  - `rc.N` - Release candidates
+Examples:
+- `v0.8.0-ce` – stable CE release
+- `v0.8.1-ce.rc.1` – first release candidate for `v0.8.1-ce`
 
-## Version History
+## Tagging & Distribution
 
-### Legacy Versions (Pre-CE Split)
-- v0.1.0 to v0.1.5: Original unified codebase
+A single Git tag (e.g. `v0.8.0-ce`) fans out to every distribution channel:
 
-### Community Edition (CE)
-- v0.2.0-ce.beta.1: First CE beta release (current)
-  - Zero telemetry implementation
-  - Complete discover functionality
-  - GitHub Actions integration
-
-### Planned Releases
-- v0.2.0-ce.beta.2: User feedback incorporation
-- v0.2.0-ce.rc.1: Release candidate
-- v0.2.0-ce: First stable CE release
-- v0.3.0-ce: Feature enhancements
+| Channel | Artifact | Notes |
+|---------|----------|-------|
+| GitHub Releases | `choreoatlas_v0.8.0-ce_<os>_<arch>.{tar.gz,zip}` + `SHA256SUMS.txt` | Uploads driven by GoReleaser |
+| Homebrew Tap | `choreoatlas2025/homebrew-choreoatlas/choreoatlas` | Formula updates commit the same version number |
+| Install scripts | `scripts/install.sh`, `scripts/install.ps1` | Default to `latest`; `--version/-Version` pins to any CE tag |
+| Containers | `choreoatlas/cli` & `ghcr.io/choreoatlas2025/cli` | Multi-arch manifests tagged `v0.8.0-ce` and `latest` |
 
 ## Branch Strategy
 
-- `main`: Current development (CE-focused)
-- `release/v*`: Release branches
-- `feature/*`: Feature development
-- Tags: `v*` for releases
+- `main`: rolling development for CE.
+- `release/v{MAJOR}.{MINOR}.x`: optional stabilization branches when coordinating large drops.
+- Tags: `v*.*.*-ce[.rc.N]` created from `main` or a release branch.
 
-## Version Comparison
+## Build Metadata Injection
 
-| Edition | Version Range | Features | Telemetry |
-|---------|--------------|----------|-----------|
-| Legacy | v0.1.x | All features mixed | Optional |
-| CE | v0.2.x-ce | Core features only | None |
-| Pro | v0.2.x-pro | Advanced features | Optional |
-| Cloud | v0.2.x-cloud | Cloud features | Required |
-
-## Build Version Injection
-
-Versions are injected at build time:
+`make build` and GoReleaser inject version metadata at link time:
 
 ```bash
-# Automatic version from git
-make build
-
-# Manual version override
-VERSION=v0.2.0-ce make build
+LDFLAGS="-X github.com/choreoatlas2025/cli/internal/cli.Version=v0.8.0-ce \
+        -X github.com/choreoatlas2025/cli/internal/cli.GitCommit=$(git rev-parse --short HEAD) \
+        -X github.com/choreoatlas2025/cli/internal/cli.BuildTime=$(date -u +%FT%TZ) \
+        -X github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce"
 ```
 
-## Release Process
+The `choreoatlas version` command always shows the `-ce` suffix so operators can confirm edition provenance.
 
-1. **Beta Phase** (current)
-   - Tag: v0.2.0-ce.beta.N
-   - Purpose: Early user testing
-   - Duration: 2-4 weeks
+## Release Checklist
 
-2. **Release Candidate**
-   - Tag: v0.2.0-ce.rc.N
-   - Purpose: Final testing
-   - Duration: 1 week
+1. Ensure `main` (or the release branch) is green in CI.
+2. Update documentation, examples, and changelog entries.
+3. Tag the release: `git tag vX.Y.Z-ce && git push origin vX.Y.Z-ce`.
+4. GitHub Actions (`release.yml`) triggers GoReleaser, which:
+   - Produces multi-arch archives and `SHA256SUMS.txt`
+   - Publishes Docker Hub and GHCR images (`vX.Y.Z-ce`, `latest`)
+   - Updates the Homebrew tap (`homebrew-choreoatlas`)
+5. Validate artifacts:
+   - `brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas`
+   - `./scripts/install.sh --version vX.Y.Z-ce`
+   - `docker run --rm choreoatlas/cli:vX.Y.Z-ce version`
+6. Announce the release (GitHub Release notes, docs updates).
 
-3. **Stable Release**
-   - Tag: v0.2.0-ce
-   - Purpose: Production use
-   - Support: Bug fixes in v0.2.x-ce
+## Future Editions
 
-## Migration Path
-
-Users upgrading from legacy versions:
-
-- v0.1.x → v0.2.0-ce: Clean install recommended
-- Configuration changes required for edition-specific features
-- No data migration needed (stateless tool)
+The `-ce` suffix keeps the namespace open for future commercial or enterprise editions (e.g. `-pro`, `-cloud`). Any new edition must use a distinct suffix and distribution channel so CE users can continue to verify the zero-telemetry guarantee.

@@ -8,10 +8,6 @@ project_name: choreoatlas
 env:
   - CGO_ENABLED=0
 
-before:
-  hooks:
-    - go mod tidy
-
 builds:
   # 只构建CE版本
   - id: ce
@@ -36,20 +32,38 @@ builds:
 
 archives:
   - id: ce-archive
-    builds:
-      - ce
-    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
       - LICENSE
       - examples/**/*
+      - docs/**/*
+      - scripts/install.sh
+      - scripts/install.ps1
     wrap_in_directory: false
-    format_overrides:
-      - goos: windows
-        format: zip
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: 'SHA256SUMS.txt'
+
+brews:
+  - name: choreoatlas
+    description: "Contract-as-Code CLI for mapping, validating, and guiding cross-service choreography"
+    homepage: https://choreoatlas.io
+    license: Apache-2.0
+    repository:
+      owner: choreoatlas2025
+      name: homebrew-choreoatlas
+      branch: main
+    commit_author:
+      name: ChoreoAtlas Bot
+      email: bot@choreoatlas.io
+    caveats: |
+      This is the Community Edition (CE) build: zero telemetry, fully offline.
+    install: |
+      bin.install "choreoatlas"
+      bin.install_symlink "choreoatlas" => "ca"
+    test: |
+      system "#{bin}/choreoatlas", "version"
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -177,14 +191,14 @@ release:
     ### 快速开始
     ```bash
     # Homebrew
-    brew tap choreoatlas2025/tap
-    brew install choreoatlas
+    brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas
     
-    # Docker
+    # Shell / PowerShell installer (macOS/Linux/Windows)
+    ./scripts/install.sh        # 或 scripts/install.ps1
+    
+    # Docker / GHCR
+    docker run --rm choreoatlas/cli:{{ .Version }} version
     docker run --rm ghcr.io/choreoatlas2025/cli:{{ .Version }} version
-    
-    # 手动下载
-    # 下载对应平台的二进制文件并添加到PATH
     ```
     
     ### 10分钟体验
