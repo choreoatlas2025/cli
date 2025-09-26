@@ -74,6 +74,8 @@ ca discover --trace examples/traces/successful-order.trace.json \
   --out-services ./services
   # discover 默认开启 JSON Schema + Lint 门禁；失败则不落盘
   # 如需跳过（不推荐）：加 --no-validate
+  # 说明：discover 默认不生成 input，遥测属性（http.*、otel.* 等）将自动转换为 ServiceSpec 的前/后置条件；
+  # 如需调用实参，请在生成后按需补齐 path/query/headers/body。
 
 # CI Gate（组合 lint + validate，并提供标准退出码）
 ca ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
@@ -219,6 +221,7 @@ choreoatlas discover
   --out-services string  ServiceSpec 输出目录（默认 "./services"）
   --title string         FlowSpec 标题
   --no-validate          跳过 Schema+Lint 门禁（不推荐）
+  # 说明：discover 默认不生成 input；遥测属性会转换为 ServiceSpec 断言。
 
 choreoatlas ci-gate
   --flow string          FlowSpec 文件路径
