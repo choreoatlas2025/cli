@@ -15,12 +15,13 @@ import (
 )
 
 func runDiscover(args []string) {
-	fs := flag.NewFlagSet("discover", flag.ExitOnError)
-	tracePath := fs.String("trace", "", "trace.json file path")
-	out := fs.String("out", "discovered.flowspec.yaml", "FlowSpec output path")
-	outServices := fs.String("out-services", "./services", "ServiceSpec output directory")
-	title := fs.String("title", "Flow generated from trace", "FlowSpec title")
-	_ = fs.Parse(args)
+    fs := flag.NewFlagSet("discover", flag.ExitOnError)
+    tracePath := fs.String("trace", "", "trace.json file path")
+    out := fs.String("out", "discovered.flowspec.yaml", "FlowSpec output path")
+    outServices := fs.String("out-services", "./services", "ServiceSpec output directory")
+    title := fs.String("title", "Flow generated from trace", "FlowSpec title")
+    noValidate := fs.Bool("no-validate", false, "Skip schema + lint validation gate (not recommended)")
+    _ = fs.Parse(args)
 
 	if *tracePath == "" {
 		exitErr(fmt.Errorf("--trace parameter is required"))
@@ -36,20 +37,27 @@ func runDiscover(args []string) {
 		return tr.Spans[i].StartNanos < tr.Spans[j].StartNanos
 	})
 
-	// 生成 FlowSpec YAML
-	yml := generateFlowYAML(tr, *title, *outServices)
-	if err := os.WriteFile(*out, []byte(yml), 0644); err != nil {
-		exitErr(fmt.Errorf("failed to write file: %w", err))
-	}
+    // 生成 FlowSpec YAML（先不落盘，先生成 ServiceSpec 与校验）
+    yml := generateFlowYAML(tr, *title, *outServices)
 
-	fmt.Printf("Generated FlowSpec: %s\n", *out)
+    // 先生成 ServiceSpec 文件（FlowSpec 校验依赖其存在）
+    if err := spec.GenerateServiceSpecs(tr.Spans, *outServices); err != nil {
+        exitErr(fmt.Errorf("failed to generate ServiceSpec: %w", err))
+    }
 
-	// Generate ServiceSpec files
-	if err := spec.GenerateServiceSpecs(tr.Spans, *outServices); err != nil {
-		exitErr(fmt.Errorf("failed to generate ServiceSpec: %w", err))
-	}
+    if !*noValidate {
+        if err := validateAndPersistFlow(yml, *out, *outServices); err != nil {
+            exitErr(fmt.Errorf("generation failed schema/lint gate: %w", err))
+        }
+        fmt.Printf("Generated FlowSpec (validated): %s\n", *out)
+    } else {
+        if err := os.WriteFile(*out, []byte(yml), 0644); err != nil {
+            exitErr(fmt.Errorf("failed to write file: %w", err))
+        }
+        fmt.Printf("Generated FlowSpec (no-validate): %s\n", *out)
+    }
 
-	fmt.Println("Dual contract generation complete! Please adjust the generated specifications as needed.")
+    fmt.Println("Dual contract generation complete! Please adjust the generated specifications as needed.")
 }
 
 // generateFlowYAML 从 trace 生成 FlowSpec YAML

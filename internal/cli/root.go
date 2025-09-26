@@ -85,7 +85,9 @@ Commands:
   discover   Generate FlowSpec from trace.json exploration (Atlas Scout)
     --trace string         trace.json file path (required)
     --out string          Generated FlowSpec output path (default "discovered.flowspec.yaml")
+    --out-services string  ServiceSpec output directory (default "./services")
     --title string        Generated FlowSpec title
+    --no-validate         Skip schema + lint validation gate (not recommended)
 
   ci-gate    CI scenario combining lint + validate with non-zero exit on failure (Atlas Proof)
     --flow string          FlowSpec file path
