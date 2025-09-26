@@ -11,7 +11,7 @@ import (
     "github.com/choreoatlas2025/cli/internal/trace"
 )
 
-func TestValidateAndPersistFlow_FailsOnInvalidCall(t *testing.T) {
+func TestValidateAndPersistFlow_NormalizesHTTPAndPasses(t *testing.T) {
     // Prepare temp workspace
     dir := t.TempDir()
     outFlow := filepath.Join(dir, "discovered.flowspec.yaml")
@@ -45,14 +45,14 @@ func TestValidateAndPersistFlow_FailsOnInvalidCall(t *testing.T) {
         t.Fatalf("failed to generate servicespecs: %v", err)
     }
 
-    // Generate Flow YAML and validate
-    yml := generateFlowYAML(tr, "From Invalid Trace", outServices)
-    if err := validateAndPersistFlow(yml, outFlow, outServices); err == nil {
-        t.Fatalf("expected validation to fail due to invalid call, but got nil error")
+    // Generate Flow YAML and validate (should pass due to opId normalization)
+    yml := generateFlowYAML(tr, "From HTTP Trace", outServices)
+    if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
+        t.Fatalf("expected validation to pass with normalized call, got: %v", err)
     }
 
-    if _, err := os.Stat(outFlow); err == nil {
-        t.Fatalf("flow file should not be written on validation failure")
+    if _, err := os.Stat(outFlow); err != nil {
+        t.Fatalf("expected flow file written after validation, stat error: %v", err)
     }
 }
 
@@ -89,4 +89,3 @@ func TestValidateAndPersistFlow_PassesOnValidExample(t *testing.T) {
         t.Fatalf("expected validated flow written, stat error: %v", err)
     }
 }
-

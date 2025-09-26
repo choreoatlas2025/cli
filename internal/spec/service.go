@@ -3,14 +3,14 @@
 package spec
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
+    "fmt"
+    "os"
+    "path/filepath"
+    "regexp"
+    "strings"
 
-	"gopkg.in/yaml.v3"
-	"github.com/choreoatlas2025/cli/internal/trace"
+    "gopkg.in/yaml.v3"
+    "github.com/choreoatlas2025/cli/internal/trace"
 )
 
 // ServiceSpecFile 表示服务规约文件（文件内可包含多个 operation）
@@ -78,36 +78,43 @@ func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
 
 // groupSpansByService 按服务分组 spans 并生成操作
 func groupSpansByService(spans []trace.Span) map[string][]ServiceOperation {
-	serviceOps := make(map[string][]ServiceOperation)
-	
-	// 按服务和操作分组
-	opGroups := make(map[string]map[string][]trace.Span)
-	
-	for _, span := range spans {
-		if span.Service == "" || span.Name == "" {
-			continue
-		}
-		
-		service := span.Service
-		opName := normalizeOperationName(span.Name)
-		
-		if _, exists := opGroups[service]; !exists {
-			opGroups[service] = make(map[string][]trace.Span)
-		}
-		opGroups[service][opName] = append(opGroups[service][opName], span)
-	}
+    serviceOps := make(map[string][]ServiceOperation)
+
+    // 按服务和操作分组
+    opGroups := make(map[string]map[string][]trace.Span)
+
+    for _, span := range spans {
+        if span.Service == "" || span.Name == "" {
+            continue
+        }
+
+        service := span.Service
+        opName := ComputeOperationID(span)
+
+        if _, exists := opGroups[service]; !exists {
+            opGroups[service] = make(map[string][]trace.Span)
+        }
+        opGroups[service][opName] = append(opGroups[service][opName], span)
+    }
 	
 	// 为每个服务的每个操作生成 ServiceOperation
-	for service, ops := range opGroups {
-		var operations []ServiceOperation
-		
-		for opName, spanList := range ops {
-			op := generateServiceOperation(opName, spanList)
-			operations = append(operations, op)
-		}
-		
-		serviceOps[service] = operations
-	}
+    for service, ops := range opGroups {
+        var operations []ServiceOperation
+        used := map[string]bool{}
+        for opName, spanList := range ops {
+            // Simple collision handling: append _2, _3...
+            base := opName
+            c := 2
+            for used[opName] {
+                opName = fmt.Sprintf("%s_%d", base, c)
+                c++
+            }
+            used[opName] = true
+            op := generateServiceOperation(opName, spanList)
+            operations = append(operations, op)
+        }
+        serviceOps[service] = operations
+    }
 	
 	return serviceOps
 }
@@ -243,15 +250,15 @@ func normalizeServiceName(name string) string {
 	return reg.ReplaceAllString(name, "_")
 }
 
+// normalizeOperationName is kept for backward compatibility but now delegates to
+// a simple sanitizer used only as fallback by ComputeOperationID.
 func normalizeOperationName(name string) string {
-	// 规范化操作名，转为驼峰式
-	// 简单实现：去除特殊字符，首字母小写
-	reg := regexp.MustCompile(`[^a-zA-Z0-9]`)
-	clean := reg.ReplaceAllString(name, "")
-	if len(clean) > 0 {
-		return strings.ToLower(clean[:1]) + clean[1:]
-	}
-	return clean
+    reg := regexp.MustCompile(`[^a-zA-Z0-9]`)
+    clean := reg.ReplaceAllString(name, "")
+    if len(clean) > 0 {
+        return strings.ToLower(clean[:1]) + clean[1:]
+    }
+    return clean
 }
 
 func normalizeIdentifier(name string) string {
