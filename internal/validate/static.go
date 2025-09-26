@@ -46,7 +46,7 @@ func LintFlow(flowPath string, fs *spec.FlowSpec, opIndex map[string]map[string]
 
 // lintFlow handles traditional flow format linting
 func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation) ([]LintIssue, error) {
-	var issues []LintIssue
+    var issues []LintIssue
 
 	// Add warning for legacy flow format
 	issues = append(issues, LintIssue{"WARN", "Using legacy flow format. Graph (DAG) format is recommended for better expressiveness and validation."})
@@ -67,7 +67,7 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 		}
 	}
 	
-	for i, st := range allSteps {
+    for i, st := range allSteps {
 		if st.Step == "" {
 			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step #%d is missing step name", i+1)})
 		}
@@ -91,10 +91,17 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
 			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references undeclared service: %s", st.Step, svc)})
 			continue
 		}
-		if _, ok := ops[op]; !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references non-existent operation %s in service %s", st.Step, op, svc)})
-		}
-	}
+        if _, ok := ops[op]; !ok {
+            issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s references non-existent operation %s in service %s", st.Step, op, svc)})
+        }
+
+        // 输入键检查：禁止将遥测属性直接放入 FlowSpec.input
+        if len(st.Input) > 0 {
+            if bad := findTelemetryKeys(st.Input); len(bad) > 0 {
+                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s input contains telemetry keys not allowed in FlowSpec.input: %s", st.Step, strings.Join(bad, ", "))})
+            }
+        }
+    }
 
 	// 3) 变量引用连贯性检查（简单版）
 	// 按步骤顺序，前置步骤输出的 token 可被后续步骤引用
@@ -182,7 +189,7 @@ func collectVarRefs(v any) []string {
 
 // lintGraph handles DAG format linting
 func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation) ([]LintIssue, error) {
-	var issues []LintIssue
+    var issues []LintIssue
 	
 	if fs.Graph == nil {
 		return append(issues, LintIssue{"ERROR", "graph is empty"}), nil
@@ -195,7 +202,7 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 	}
 	
 	// 2) Node call validation (similar to flow step validation)
-	for _, node := range fs.Graph.Nodes {
+    for _, node := range fs.Graph.Nodes {
 		svc, op, err := splitCall(node.Call)
 		if err != nil {
 			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s has invalid call: %v", node.ID, err)})
@@ -206,10 +213,17 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s references undeclared service: %s", node.ID, svc)})
 			continue
 		}
-		if _, ok := ops[op]; !ok {
-			issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s references non-existent operation %s in service %s", node.ID, op, svc)})
-		}
-	}
+        if _, ok := ops[op]; !ok {
+            issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s references non-existent operation %s in service %s", node.ID, op, svc)})
+        }
+
+        // 输入键检查：禁止遥测属性出现在输入中
+        if len(node.Input) > 0 {
+            if bad := findTelemetryKeys(node.Input); len(bad) > 0 {
+                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s input contains telemetry keys not allowed in FlowSpec.input: %s", node.ID, strings.Join(bad, ", "))})
+            }
+        }
+    }
 	
 	// 3) Variable flow validation for DAG
 	if err := validateVariableFlow(fs.Graph); err != nil {
@@ -217,6 +231,38 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
 	}
 	
 	return issues, nil
+}
+
+// findTelemetryKeys 检查输入映射中是否出现明显的遥测前缀键
+// 允许的顶层键：path, query, headers, body
+// 当在 body 下出现以 http./otel./span. 前缀的键，或顶层直接以这些前缀开头的键，则视为不合法
+func findTelemetryKeys(input map[string]any) []string {
+    var out []string
+    // 允许的顶层键
+    allowed := map[string]struct{}{"path": {}, "query": {}, "headers": {}, "body": {}}
+
+    // 收集顶层非法键
+    for k := range input {
+        if _, ok := allowed[k]; !ok {
+            if hasTelemetryPrefix(k) {
+                out = append(out, k)
+            }
+        }
+    }
+    // 检查 body 下的键
+    if b, ok := input["body"].(map[string]any); ok {
+        for k := range b {
+            if hasTelemetryPrefix(k) {
+                out = append(out, "body."+k)
+            }
+        }
+    }
+    return unique(out)
+}
+
+func hasTelemetryPrefix(k string) bool {
+    lower := strings.ToLower(k)
+    return strings.HasPrefix(lower, "http.") || strings.HasPrefix(lower, "otel.") || strings.HasPrefix(lower, "span.")
 }
 
 // validateVariableFlow checks that variables flow correctly through the DAG

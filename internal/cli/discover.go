@@ -96,19 +96,8 @@ func generateFlowYAML(tr *trace.Trace, title string, outServices string) string 
         sb.WriteString(fmt.Sprintf("  - step: \"%s\"\n", stepName))
         sb.WriteString(fmt.Sprintf("    call: \"%s.%s\"\n", span.Service, opId))
 
-		// 生成示例 input（基于 attributes）
-		if len(span.Attributes) > 0 {
-			sb.WriteString("    input:\n")
-			sb.WriteString("      body:\n")
-			for key, value := range span.Attributes {
-				// 简单的变量引用推断
-				if strings.Contains(key, "Id") {
-					sb.WriteString(fmt.Sprintf("        %s: \"${%s}\"  # TODO: Check variable reference\n", key, key))
-				} else {
-					sb.WriteString(fmt.Sprintf("        %s: %v  # TODO: Adjust input value\n", key, value))
-				}
-			}
-		}
+        // 不再将遥测属性塞入 FlowSpec.input，保持输入干净。
+        // 如需传入真实调用实参（path/query/headers/body），请由用户后续补充。
 
 		// Generate output (assuming each step has a response)
         outputVar := fmt.Sprintf("%sResponse", strings.ToLower(span.Service))

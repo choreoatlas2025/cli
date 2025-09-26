@@ -151,16 +151,31 @@ func generateServiceOperation(opName string, spans []trace.Span) ServiceOperatio
 
 // buildCELExpression 根据属性键值生成 CEL 表达式
 func buildCELExpression(key string, value interface{}) string {
-	keyLower := strings.ToLower(key)
-	
-	// 状态码检查
-	if isStatusAttribute(key, value) {
-		if intVal, ok := value.(int); ok {
-			return fmt.Sprintf("response.status == %d", intVal)
-		} else if floatVal, ok := value.(float64); ok {
-			return fmt.Sprintf("response.status == %d", int(floatVal))
-		}
-	}
+    keyLower := strings.ToLower(key)
+
+    // Special cases for common HTTP request attributes
+    if keyLower == "http.method" {
+        if s, ok := value.(string); ok && s != "" {
+            return fmt.Sprintf("http.method == '%s'", s)
+        }
+    }
+    if keyLower == "http.route" || keyLower == "http.target" {
+        if s, ok := value.(string); ok && s != "" {
+            return fmt.Sprintf("http.route == '%s'", s)
+        }
+    }
+
+    // 状态码检查
+    if isStatusAttribute(key, value) {
+        switch v := value.(type) {
+        case int:
+            return fmt.Sprintf("response.status == %d", v)
+        case int64:
+            return fmt.Sprintf("response.status == %d", int(v))
+        case float64:
+            return fmt.Sprintf("response.status == %d", int(v))
+        }
+    }
 	
 	// Bearer token 检查
 	if isBearerToken(key, value) {
@@ -207,8 +222,8 @@ func isBearerToken(key string, value interface{}) bool {
 }
 
 func isRequestAttribute(key string) bool {
-	keyLower := strings.ToLower(key)
-	requestPatterns := []string{"request.", "http.method", "http.url"}
+    keyLower := strings.ToLower(key)
+    requestPatterns := []string{"request.", "http.method", "http.url", "http.route", "http.target"}
 	
 	for _, pattern := range requestPatterns {
 		if strings.Contains(keyLower, pattern) {
