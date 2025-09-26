@@ -98,7 +98,9 @@ func lintFlow(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOpera
         // 输入键检查：禁止将遥测属性直接放入 FlowSpec.input
         if len(st.Input) > 0 {
             if bad := findTelemetryKeys(st.Input); len(bad) > 0 {
-                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("step=%s input contains telemetry keys not allowed in FlowSpec.input: %s", st.Step, strings.Join(bad, ", "))})
+                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf(
+                    "step=%s input contains telemetry keys not allowed in FlowSpec.input: %s (建议: 将 http.* / otel.* / span.* 移至 ServiceSpec 的 preconditions/postconditions)",
+                    st.Step, strings.Join(bad, ", "))})
             }
         }
     }
@@ -220,7 +222,9 @@ func lintGraph(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOper
         // 输入键检查：禁止遥测属性出现在输入中
         if len(node.Input) > 0 {
             if bad := findTelemetryKeys(node.Input); len(bad) > 0 {
-                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf("node=%s input contains telemetry keys not allowed in FlowSpec.input: %s", node.ID, strings.Join(bad, ", "))})
+                issues = append(issues, LintIssue{"ERROR", fmt.Sprintf(
+                    "node=%s input contains telemetry keys not allowed in FlowSpec.input: %s (Suggestion: move http.* / otel.* / span.* into ServiceSpec preconditions/postconditions)",
+                    node.ID, strings.Join(bad, ", "))})
             }
         }
     }
