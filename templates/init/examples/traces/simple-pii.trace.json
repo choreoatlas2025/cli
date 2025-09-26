@@ -1,0 +1,17 @@
+{
+  "spans": [
+    {
+      "name": "createOrder", 
+      "service": "orderService",
+      "startNanos": 1693910000000000000,
+      "endNanos": 1693910000100000000,
+      "attributes": {
+        "email": "john.doe@example.com",
+        "phone": "+1-555-123-4567",
+        "customerId": "CUST-12345",
+        "password": "secret123",
+        "authToken": "auth_abc123"
+      }
+    }
+  ]
+}

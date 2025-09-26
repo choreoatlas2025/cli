@@ -1,0 +1,9 @@
+service: "shippingService"
+operations:
+  - operationId: "createShipment"
+    description: "创建发货单"
+    preconditions: {}
+    postconditions:
+      "发货单创建成功": "response.status == 201"
+      "返回发货单号": "response.body.shipmentId != ''"
+      "返回订单ID": "response.body.orderId != ''"

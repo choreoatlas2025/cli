@@ -1,0 +1,41 @@
+info:
+  title: "E-commerce Order Fulfillment (Graph Format)"
+  description: "Order processing flow using DAG format"
+  version: "1.0.0"
+
+services:
+  orderService:
+    spec: "../services/order-service.servicespec.yaml"
+  inventoryService:
+    spec: "../services/inventory-service.servicespec.yaml"
+  shippingService:
+    spec: "../services/shipping-service.servicespec.yaml"
+
+graph:
+  nodes:
+    - id: "createOrder"
+      call: "orderService.createOrder"
+      output:
+        orderId: "response.orderId"
+        customerId: "response.customerId"
+
+    - id: "checkInventory"
+      call: "inventoryService.reserveInventory"
+      depends: ["createOrder"]
+      input:
+        orderId: "${orderId}"
+        customerId: "${customerId}"
+      output:
+        reservationId: "response.reservationId"
+        reservedItems: "response.reservedItems"
+
+    - id: "createShipment"
+      call: "shippingService.createShipment"
+      depends: ["checkInventory"]
+      input:
+        orderId: "${orderId}"
+        customerId: "${customerId}"
+        items: "${reservedItems}"
+      output:
+        shipmentId: "response.shipmentId"
+        trackingNumber: "response.trackingNumber"

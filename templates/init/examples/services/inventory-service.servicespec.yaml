@@ -1,0 +1,9 @@
+service: "inventoryService"
+operations:
+  - operationId: "reserveInventory"
+    description: "预留库存"
+    preconditions: {}
+    postconditions:
+      "库存预留成功": "response.status == 200"
+      "返回订单ID": "response.body.orderId != ''"
+      "返回预留项目": "size(response.body.reservedItems) > 0"

@@ -1,0 +1,15 @@
+{
+  "spans": [
+    {
+      "name": "createOrder",
+      "service": "orderService",
+      "startNanos": 1693910000000000000,
+      "endNanos": 1693910000100000000,
+      "attributes": {
+        "orderId": "ORD-2023-002",
+        "customerId": "CUST-002",
+        "totalAmount": 299.99
+      }
+    }
+  ]
+}

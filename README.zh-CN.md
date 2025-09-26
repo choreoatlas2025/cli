@@ -39,9 +39,24 @@ brew install choreoatlas
 alias ca=choreoatlas
 ```
 
+### 5 分钟初始化
+
+```bash
+choreoatlas init
+choreoatlas lint
+choreoatlas validate --trace traces/successful-order.trace.json
+```
+
+- `init` 会在当前目录生成 FlowSpec/ServiceSpec/示例 trace，并可选生成 GitHub Actions 工作流。
+- 加上 `--trace your.trace.json` 可复用已有 trace 自动生成契约骨架。
+- 通过 `--ci minimal|combo` 写入 `.github/workflows/choreoatlas.yml`，推送即跑 CI。
+
 ### 基本用法
 
 ```bash
+# 交互式生成入门目录
+ca init
+
 # 静态校验（包含 JSON Schema 验证）
 ca lint --flow examples/flows/order-fulfillment.flowspec.yaml
 
@@ -65,6 +80,9 @@ ca ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace example
 ## 🧾 TL;DR 速查表
 
 ```bash
+# 一键生成入门示例（FlowSpec + ServiceSpec + Trace）
+ca init
+
 # Lint 当前目录下的 FlowSpec（默认读取 .flowspec.yaml）
 ca lint --flow .flowspec.yaml
 
@@ -165,6 +183,16 @@ operations:
 ## 🧰 CLI 参考
 
 ```text
+choreoatlas init
+  --mode string          初始化模式：template|trace
+  --trace string         指定 trace.json（from-trace 模式）
+  --ci string            GitHub Actions 模板：none|minimal|combo
+  --examples             复制 examples/* 示例目录
+  --yes                  默认接受交互提示
+  --force                覆盖已存在文件
+  --out string           目标目录（默认 "."）
+  --title string         自定义 FlowSpec 标题
+
 choreoatlas lint
   --flow string          FlowSpec 文件路径（默认 ".flowspec.yaml"）
   --schema               是否启用 JSON Schema 严格校验（默认 true）

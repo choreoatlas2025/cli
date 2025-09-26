@@ -27,6 +27,8 @@ func Execute() {
 	case "version", "-v", "--version":
 		runVersion(os.Args[2:])
 		return
+	case "init":
+		runInit(os.Args[2:])
 	case "lint":
 		runLint(os.Args[2:])
 	case "validate":
@@ -52,6 +54,16 @@ Usage:
   ca <command> [options]  # alias
 
 Commands:
+  init       Bootstrap starter project with FlowSpec/ServiceSpec templates
+    --mode string          Bootstrap mode: template|trace
+    --trace string         trace.json file path for from-trace mode
+    --ci string            GitHub Actions template: none|minimal|combo
+    --examples             Copy examples/* starter assets
+    --yes                  Accept defaults without interactive prompts
+    --force                Overwrite existing files when present
+    --out string           Target directory (default ".")
+    --title string         Override FlowSpec title
+
   lint       Static validation of FlowSpec consistency and call coherence
     --flow string          FlowSpec file path (default ".flowspec.yaml")
     --schema               Enable JSON Schema strict validation (default true)

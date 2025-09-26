@@ -62,9 +62,24 @@ docker run --rm ghcr.io/choreoatlas2025/cli:latest version
 
 Run `choreoatlas version` after installation to confirm the build and edition suffix (`-ce`).
 
+### Bootstrap A Workspace
+
+```bash
+choreoatlas init
+choreoatlas lint
+choreoatlas validate --trace traces/successful-order.trace.json
+```
+
+- `init` generates FlowSpec, ServiceSpec, starter trace files, and optional GitHub Actions workflow in the current directory.
+- Pass `--trace your-trace.json` to bootstrap from an existing trace.
+- Use `--ci minimal|combo` to inject `.github/workflows/choreoatlas.yml`.
+
 ### Basic Usage
 
 ```bash
+# Bootstrap an interactive starter project
+choreoatlas init
+
 # Static validation (includes JSON Schema validation)
 choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
 
@@ -102,6 +117,9 @@ docker run --rm -v $(pwd):/workspace choreoatlas/cli:latest validate \
 Common one‑liners for day‑to‑day work:
 
 ```bash
+# Create a starter workspace (FlowSpec + ServiceSpec + trace)
+ca init
+
 # Lint your FlowSpec (uses embedded JSON Schemas)
 ca lint --flow .flowspec.yaml
 
@@ -254,6 +272,16 @@ choreoatlas validate --flow examples/flows/order-fulfillment.flowspec.yaml --tra
 Commands and important flags (defaults shown where relevant):
 
 ```text
+choreoatlas init
+  --mode string          Bootstrap mode: template|trace
+  --trace string         trace.json path for from-trace mode
+  --ci string            GitHub Actions workflow: none|minimal|combo
+  --examples             Copy examples/* starter assets
+  --yes                  Accept defaults without prompts
+  --force                Overwrite existing files
+  --out string           Target directory (default ".")
+  --title string         Override FlowSpec title
+
 choreoatlas lint
   --flow string          FlowSpec file path (default ".flowspec.yaml")
   --schema               Enable JSON Schema strict validation (default true)

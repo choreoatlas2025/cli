@@ -1,0 +1,9 @@
+service: "orderService"
+operations:
+  - operationId: "createOrder"
+    description: "创建新订单"
+    preconditions: {}
+    postconditions:
+      "订单创建成功": "response.status == 201"
+      "返回订单ID": "response.body.orderId != ''"
+      "返回客户ID": "response.body.customerId != ''"

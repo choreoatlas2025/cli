@@ -1,0 +1,57 @@
+info:
+  title: "Order Fulfillment Flow (Parallel Version)"
+
+services:
+  orderService:
+    spec: "../services/order-service.servicespec.yaml"
+  inventoryService:
+    spec: "../services/inventory-service.servicespec.yaml"
+  shippingService:
+    spec: "../services/shipping-service.servicespec.yaml"
+  riskService:
+    spec: "../services/risk-service.servicespec.yaml"
+
+flow:
+  - step: "Create Order"
+    call: "orderService.createOrder"
+    input:
+      body:
+        customerId: "${customerId}"
+        items: "${orderItems}"
+        totalAmount: "${totalAmount}"
+    output:
+      orderResponse: "response.body"
+
+  # Parallel execution of inventory reservation and risk check
+  - step: "Parallel Processing"
+    parallel:
+      - step: "Reserve Inventory"
+        call: "inventoryService.reserveInventory"
+        input:
+          body:
+            orderId: "${orderResponse.orderId}"
+            items: "${orderResponse.items}"
+        output:
+          inventoryResponse: "response.body"
+
+      - step: "Risk Check"
+        call: "riskService.check"
+        input:
+          body:
+            orderId: "${orderResponse.orderId}"
+            customerId: "${orderResponse.customerId}"
+            totalAmount: "${orderResponse.totalAmount}"
+        output:
+          riskResponse: "response.body"
+
+  - step: "Create Shipment"
+    call: "shippingService.createShipment"
+    input:
+      body:
+        orderId: "${orderResponse.orderId}"
+        customerId: "${orderResponse.customerId}"
+        items: "${inventoryResponse.reservedItems}"
+        riskLevel: "${riskResponse.riskLevel}"
+        shippingAddress: "123 Test Street"
+    output:
+      shippingResponse: "response.body"

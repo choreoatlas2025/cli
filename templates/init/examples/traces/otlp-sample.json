@@ -1,0 +1,172 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "orderService"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "order-service-tracer",
+            "version": "1.0.0"
+          },
+          "spans": [
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "1011121314151617",
+              "name": "createOrder",
+              "startTimeUnixNano": "1693910000000000000",
+              "endTimeUnixNano": "1693910000100000000",
+              "attributes": [
+                {
+                  "key": "http.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.url",
+                  "value": {
+                    "stringValue": "/api/orders"
+                  }
+                },
+                {
+                  "key": "http.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                },
+                {
+                  "key": "response.body",
+                  "value": {
+                    "stringValue": "{\"orderId\":\"ORD-2023-001\",\"customerId\":\"CUST-001\",\"totalAmount\":199.99}"
+                  }
+                }
+              ],
+              "status": {
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "inventoryService"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "inventory-service-tracer"
+          },
+          "spans": [
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "2021222324252627",
+              "parentSpanId": "1011121314151617",
+              "name": "reserveInventory",
+              "startTimeUnixNano": "1693910000150000000",
+              "endTimeUnixNano": "1693910000250000000",
+              "attributes": [
+                {
+                  "key": "http.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                },
+                {
+                  "key": "response.body",
+                  "value": {
+                    "stringValue": "{\"orderId\":\"ORD-2023-001\",\"reservedItems\":[{\"productId\":\"PROD-001\",\"quantity\":2}]}"
+                  }
+                }
+              ],
+              "status": {
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "shippingService"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "shipping-service-tracer"
+          },
+          "spans": [
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "3031323334353637",
+              "parentSpanId": "1011121314151617",
+              "name": "createShipment",
+              "startTimeUnixNano": "1693910000300000000",
+              "endTimeUnixNano": "1693910000400000000",
+              "attributes": [
+                {
+                  "key": "http.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                },
+                {
+                  "key": "response.body",
+                  "value": {
+                    "stringValue": "{\"orderId\":\"ORD-2023-001\",\"shipmentId\":\"SHIP-2023-001\",\"estimatedDelivery\":\"2023-09-10\"}"
+                  }
+                }
+              ],
+              "status": {
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
