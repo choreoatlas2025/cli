@@ -72,6 +72,8 @@ ca validate --flow examples/flows/order-fulfillment.flowspec.yaml \
 ca discover --trace examples/traces/successful-order.trace.json \
   --out discovered.flowspec.yaml \
   --out-services ./services
+  # discover 默认开启 JSON Schema + Lint 门禁；失败则不落盘
+  # 如需跳过（不推荐）：加 --no-validate
 
 # CI Gate（组合 lint + validate，并提供标准退出码）
 ca ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
@@ -216,6 +218,7 @@ choreoatlas discover
   --out string           FlowSpec 输出（默认 "discovered.flowspec.yaml"）
   --out-services string  ServiceSpec 输出目录（默认 "./services"）
   --title string         FlowSpec 标题
+  --no-validate          跳过 Schema+Lint 门禁（不推荐）
 
 choreoatlas ci-gate
   --flow string          FlowSpec 文件路径
@@ -385,4 +388,3 @@ Apache 2.0，详见 [LICENSE](LICENSE)。
 - Discussions：https://github.com/choreoatlas2025/cli/discussions
 
 —— ChoreoAtlas CLI：以契约即代码映射、校验并引导你的服务编排
-

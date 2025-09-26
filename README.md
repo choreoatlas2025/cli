@@ -94,6 +94,8 @@ choreoatlas discover \
   --trace examples/traces/successful-order.trace.json \
   --out discovered.flowspec.yaml \
   --out-services ./services
+# By default, discover enforces JSON Schema + lint gates and only writes on success.
+# To bypass (not recommended), add: --no-validate
 
 # CI gate mode (combines lint + validate with proper exit codes)
 choreoatlas ci-gate --flow examples/flows/order-fulfillment.flowspec.yaml --trace examples/traces/successful-order.trace.json
@@ -144,6 +146,7 @@ ca validate --flow .flowspec.yaml --trace trace.json \
 
 # Discover specs from a trace (FlowSpec + ServiceSpec files)
 ca discover --trace trace.json --out discovered.flowspec.yaml --out-services ./services
+# Gate is enabled by default; use --no-validate to bypass (not recommended)
 
 # Run lint + validate in one go (CI gate)
 ca ci-gate --flow .flowspec.yaml --trace trace.json
