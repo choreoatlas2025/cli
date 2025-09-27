@@ -4,6 +4,9 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/docker/v/choreoatlas/cli?label=docker)](https://hub.docker.com/r/choreoatlas/cli)
 
+[![Website](https://img.shields.io/badge/website-choreoatlas.com-0b72e7?logo=firefox-browser&logoColor=white)](https://choreoatlas.com)
+[![Docs](https://img.shields.io/badge/docs-choreoatlas.io-0b72e7?logo=readthedocs&logoColor=white)](https://choreoatlas.io)
+
 Map. Verify. Steer your cross-service choreography — a developer-friendly, Swiss‑army‑knife style CLI for Contract‑as‑Code.
 
 This is the Community Edition (CE): zero telemetry, fully offline.
@@ -13,9 +16,12 @@ ChoreoAtlas is a Contract‑as‑Code platform for interactive logic governance 
 - Atlas Proof: validate choreography against runtime behavior
 - Atlas Pilot: static linting and guidance
 
-Whitepaper: see `../whitepaper/ChoreoAtlas-Whitepaper-1.1.zh-CN.md`
+Whitepaper (zh‑CN): see `../whitepaper/zh-CN/ChoreoAtlas-Whitepaper-1.1R.md` (latest)
+Historical: `../whitepaper/zh-CN/ChoreoAtlas-Whitepaper-1.1.md`
 
 Looking for Chinese? See README.zh-CN.md
+
+Quick links: [Business Website](https://choreoatlas.com) · [Documentation Portal](https://choreoatlas.io) · [Pricing](https://choreoatlas.com/pricing) · [Contact](https://choreoatlas.com/contact)
 
 ## 🚀 Quick Start
 
