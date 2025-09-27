@@ -1,36 +1,3 @@
-# 编译产物
+# Build/test caches
+.gocache/
 bin/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# 测试产物
-*.test
-*.out
-
-# Go 工作空间文件
-go.work
-
-# IDE 文件
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# 系统文件
-.DS_Store
-Thumbs.db
-
-# 临时文件
-*.tmp
-*.log
-
-# 覆盖率报告
-coverage.out
-coverage.htmldist/
-
-# Claude AI 配置文件
-CLAUDE.md
