@@ -12,7 +12,6 @@ import (
 
     "github.com/choreoatlas2025/cli/internal/cli/exitcode"
     "github.com/choreoatlas2025/cli/internal/spec"
-    "gopkg.in/yaml.v3"
 )
 
 // Execute runs the CLI command
@@ -255,8 +254,8 @@ func runConvert(args []string) {
     if !fspec.IsGraphMode() {
         exitErr(fmt.Errorf("input is not in graph(DAG) format"))
     }
-    conv := convertGraphToFlow(fspec)
-    if err := writeFlowSpec(*out, conv); err != nil {
+    conv := spec.ConvertGraphToFlow(fspec)
+    if err := spec.WriteFlowSpec(*out, conv); err != nil {
         exitErr(err)
     }
     fmt.Printf("Converted graph -> flow: %s\n", *out)
@@ -347,64 +346,4 @@ func runSystemGroup(args []string) {
 }
 
 // convertGraphToFlow performs DAG→flow conversion using FlowSpec/GraphSpec types from spec package
-func convertGraphToFlow(fs *spec.FlowSpec) *spec.FlowSpec {
-    if fs == nil || fs.Graph == nil { return fs }
-    g := fs.Graph
-    g.EnsureEdges()
-    inDeg := map[string]int{}
-    adj := map[string][]string{}
-    nodes := map[string]spec.GraphNode{}
-    for _, n := range g.Nodes {
-        nodes[n.ID] = n
-        inDeg[n.ID] = 0
-    }
-    for _, e := range g.Edges {
-        adj[e.From] = append(adj[e.From], e.To)
-        inDeg[e.To]++
-    }
-    origIn := map[string]int{}
-    for k, v := range inDeg { origIn[k] = v }
-    visited := map[string]bool{}
-    queue := []string{}
-    for id, d := range inDeg { if d == 0 { queue = append(queue, id) } }
-
-    var flow []spec.FlowStep
-    for len(queue) > 0 {
-        id := queue[0]
-        queue = queue[1:]
-        if visited[id] { continue }
-        visited[id] = true
-        n := nodes[id]
-        succ := adj[id]
-        par := []string{}
-        for _, s := range succ { if origIn[s] == 1 { par = append(par, s) } }
-        if len(par) > 1 {
-            parent := spec.FlowStep{ Step: n.ID, Call: n.Call, Input: n.Input, Output: n.Output, Meta: n.Meta }
-            for _, s := range par {
-                child := spec.FlowStep{ Step: nodes[s].ID, Call: nodes[s].Call, Input: nodes[s].Input, Output: nodes[s].Output, Meta: nodes[s].Meta }
-                parent.Parallel = append(parent.Parallel, child)
-                visited[s] = true
-                for _, ns := range adj[s] {
-                    if inDeg[ns] > 0 { inDeg[ns]-- }
-                    if inDeg[ns] == 0 { queue = append(queue, ns) }
-                }
-            }
-            flow = append(flow, parent)
-        } else {
-            flow = append(flow, spec.FlowStep{ Step: n.ID, Call: n.Call, Input: n.Input, Output: n.Output, Meta: n.Meta })
-            for _, s := range succ {
-                if inDeg[s] > 0 { inDeg[s]-- }
-                if inDeg[s] == 0 { queue = append(queue, s) }
-            }
-        }
-    }
-    out := &spec.FlowSpec{ Info: fs.Info, Services: fs.Services, Flow: flow }
-    return out
-}
-
-// writeFlowSpec writes FlowSpec YAML to file (local helper)
-func writeFlowSpec(path string, fs *spec.FlowSpec) error {
-    b, err := yaml.Marshal(fs)
-    if err != nil { return fmt.Errorf("failed to marshal flowspec: %w", err) }
-    return os.WriteFile(path, b, 0644)
-}
+// conversion helpers moved to internal/spec/convert.go
