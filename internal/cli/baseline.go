@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
+	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -53,7 +54,11 @@ func runBaselineRecord(args []string) {
 	}
 
 	// Perform validation to get results
-	results, _ := validate.ValidateAgainstTrace(flow, opIndex, tr)
+	results, ok := validate.ValidateAgainstTrace(flow, opIndex, tr)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "Validation failed; baseline not recorded.")
+		os.Exit(exitcode.ValidationFailed)
+	}
 
 	// Record baseline
 	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath)
