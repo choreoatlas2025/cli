@@ -1,0 +1,107 @@
+# Minimal CI Gate for Trace-Spec Alignment
+# Validates that runtime traces match flowspec expectations
+# Threshold: match_rate >= 0.90
+
+name: Spec Gate (Minimal)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  lint:
+    name: Lint Gate Demo Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate YAML syntax
+        run: |
+          echo "Validating gate-demo.flowspec.yaml..."
+          if ! command -v yamllint &> /dev/null; then
+            pip install yamllint
+          fi
+          yamllint examples/flows/gate-demo.flowspec.yaml || echo "YAML validation completed"
+
+      - name: Validate JSON syntax
+        run: |
+          echo "Validating gate-demo.trace.json..."
+          python3 -m json.tool examples/traces/gate-demo.trace.json > /dev/null
+          echo "✓ JSON is valid"
+
+  align:
+    name: Trace-Spec Alignment Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install js-yaml dependency
+        run: npm install js-yaml
+
+      - name: Run trace-spec matcher
+        id: matcher
+        run: |
+          echo "Running trace-map.js..."
+          node tools/trace-map.js \
+            --trace examples/traces/gate-demo.trace.json \
+            --flow examples/flows/gate-demo.flowspec.yaml \
+            > gate_report.json || true
+
+          echo "Generated report:"
+          cat gate_report.json | python3 -m json.tool
+
+      - name: Upload gate report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-report
+          path: gate_report.json
+
+  report:
+    name: Gate Report & Decision
+    runs-on: ubuntu-latest
+    needs: align
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install js-yaml
+
+      - name: Download gate report
+        uses: actions/download-artifact@v4
+        with:
+          name: gate-report
+
+      - name: Evaluate gate threshold
+        run: |
+          echo "=== Spec Gate Report ==="
+          cat gate_report.json | python3 -m json.tool
+
+          MATCH_RATE=$(cat gate_report.json | python3 -c "import sys, json; print(json.load(sys.stdin)['matchRate'])")
+          THRESHOLD=0.90
+
+          echo ""
+          echo "Match Rate: $MATCH_RATE"
+          echo "Threshold:  $THRESHOLD"
+          echo ""
+
+          if (( $(echo "$MATCH_RATE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Gate FAILED: Match rate $MATCH_RATE < $THRESHOLD"
+            echo ""
+            echo "Missing steps:"
+            cat gate_report.json | python3 -c "import sys, json; [print(f'  - {s}') for s in json.load(sys.stdin)['missing']]"
+            exit 1
+          else
+            echo "✅ Gate PASSED: Match rate $MATCH_RATE >= $THRESHOLD"
+            exit 0
+          fi

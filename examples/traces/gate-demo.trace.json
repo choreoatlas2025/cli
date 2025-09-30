@@ -1,0 +1,17 @@
+{
+  "traceId": "gate-demo-incomplete",
+  "description": "Incomplete trace missing shipping step - will trigger CI FAIL",
+  "steps": [
+    {
+      "service": "orderService",
+      "operation": "createOrder",
+      "timestamp": "2025-09-30T10:00:00Z"
+    },
+    {
+      "service": "inventoryService",
+      "operation": "reserveStock",
+      "timestamp": "2025-09-30T10:00:01Z"
+    }
+  ],
+  "note": "Missing shippingService.acknowledge - match rate will be 2/3 = 0.67 < 0.90"
+}

@@ -1,0 +1,28 @@
+# Minimal CI Gate Demo Flow
+# This flow demonstrates the spec gate validation mechanism
+# Expected: order -> inventory -> shipping sequence
+
+info:
+  title: "CI Gate Demo: Order Fulfillment"
+  description: "Minimal flow for testing trace-spec alignment gate"
+
+services:
+  orderService:
+    operations:
+      - createOrder
+  inventoryService:
+    operations:
+      - reserveStock
+  shippingService:
+    operations:
+      - acknowledge
+
+flow:
+  - step: "Create Order"
+    call: "orderService.createOrder"
+
+  - step: "Reserve Inventory"
+    call: "inventoryService.reserveStock"
+
+  - step: "Shipping Acknowledgment"
+    call: "shippingService.acknowledge"
