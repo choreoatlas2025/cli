@@ -1,0 +1,22 @@
+{
+  "traceId": "gate-demo-complete",
+  "description": "Complete trace with all expected steps - will trigger CI PASS",
+  "steps": [
+    {
+      "service": "orderService",
+      "operation": "createOrder",
+      "timestamp": "2025-09-30T10:00:00Z"
+    },
+    {
+      "service": "inventoryService",
+      "operation": "reserveStock",
+      "timestamp": "2025-09-30T10:00:01Z"
+    },
+    {
+      "service": "shippingService",
+      "operation": "acknowledge",
+      "timestamp": "2025-09-30T10:00:02Z"
+    }
+  ],
+  "note": "All steps present - match rate will be 3/3 = 1.00 >= 0.90"
+}
