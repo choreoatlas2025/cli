@@ -11,6 +11,44 @@ Map. Verify. Steer your cross-service choreography — a developer-friendly, Swi
 
 This is the Community Edition (CE): zero telemetry, fully offline.
 
+---
+
+## ⚡ Get Started in 2 Steps
+
+**1. Install & Init:**
+```bash
+brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas
+choreoatlas init
+```
+
+**2. Validate Your First Flow:**
+```bash
+choreoatlas validate --trace traces/successful-order.trace.json
+```
+
+### See It In Action
+
+![Quickstart Demo](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/demos/quickstart.gif)
+
+*30-second demo: Discover contracts from traces → Validate → Catch misalignment*
+
+### Real CI Validation
+
+| ❌ Before: Missing Payment Step | ✅ After: Complete Flow |
+|---|---|
+| ![CI Fail](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/screenshots/ci-gate-fail.png) | ![CI Pass](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/screenshots/ci-gate-pass.png) |
+
+*Automated FlowSpec-Trace alignment checks in your CI pipeline*
+
+### Learn More
+
+- 📖 **[Read the Whitepaper](https://choreoatlas.io/whitepaper)** - Deep dive into Contract-as-Code
+- 🌐 **[Visit choreoatlas.com](https://choreoatlas.com)** - Product overview & pricing
+- 📰 **[Subscribe to Newsletter](https://buttondown.com/choreoatlas)** - Updates & insights
+- 💬 **[GitHub Discussions](https://github.com/choreoatlas2025/cli/discussions)** - Ask questions & share feedback
+
+---
+
 ChoreoAtlas is a Contract‑as‑Code platform for interactive logic governance following the Discover → Specify → Guide loop. It supports dual contracts (FlowSpec + ServiceSpec) and provides:
 - Atlas Scout: discover specs from trace data
 - Atlas Proof: validate choreography against runtime behavior
