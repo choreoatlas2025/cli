@@ -4,8 +4,8 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/docker/v/choreoatlas/cli?label=docker)](https://hub.docker.com/r/choreoatlas/cli)
 
-[![Website](https://img.shields.io/badge/website-choreoatlas.com-0b72e7?logo=firefox-browser&logoColor=white)](https://choreoatlas.com)
-[![Docs](https://img.shields.io/badge/docs-choreoatlas.io-0b72e7?logo=readthedocs&logoColor=white)](https://choreoatlas.io)
+[![Website](https://img.shields.io/badge/website-cq365.eu.org-0b72e7?logo=firefox-browser&logoColor=white)](https://cq365.eu.org/)
+[![Docs](https://img.shields.io/badge/docs-cq365.eu.org-0b72e7?logo=readthedocs&logoColor=white)](https://cq365.eu.org/docs/)
 
 Map. Verify. Steer your cross-service choreography — a developer-friendly, Swiss‑army‑knife style CLI for Contract‑as‑Code.
 
@@ -13,38 +13,22 @@ This is the Community Edition (CE): zero telemetry, fully offline.
 
 ---
 
-## ⚡ Get Started in 2 Steps
+## ⚡ Run the verified pass/fail demo
 
-**1. Install & Init:**
+With Git, Docker and Make installed:
+
 ```bash
-brew install choreoatlas2025/homebrew-choreoatlas/choreoatlas
-choreoatlas init
+git clone https://github.com/choreoatlas2025/quickstart-demo.git
+cd quickstart-demo
+make demo
 ```
 
-**2. Validate Your First Flow:**
-```bash
-choreoatlas validate --trace traces/successful-order.trace.json
-```
-
-### See It In Action
-
-![Quickstart Demo](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/demos/quickstart.gif)
-
-*30-second demo: Discover contracts from traces → Validate → Catch misalignment*
-
-### Real CI Validation
-
-| ❌ Before: Missing Payment Step | ✅ After: Complete Flow |
-|---|---|
-| ![CI Fail](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/screenshots/ci-gate-fail.png) | ![CI Pass](https://raw.githubusercontent.com/choreoatlas2025/marketing_job/main/assets/screenshots/ci-gate-pass.png) |
-
-*Automated FlowSpec-Trace alignment checks in your CI pipeline*
+Open `reports/successful-order-report.html` and `reports/failed-payment-report.html`. The first sample passes all five flow steps; the second fails the gate as expected. Some input preconditions are `SKIP` because the sample trace lacks those fields. [Read the walkthrough](https://cq365.eu.org/docs/guide/getting-started) before applying the checks to your own trace. The [quickstart workflow](https://github.com/choreoatlas2025/quickstart-demo/blob/main/.github/workflows/choreoatlas-validation.yml) runs the same command in CI.
 
 ### Learn More
 
-- 📖 **[Read the Whitepaper](https://choreoatlas.io/whitepaper)** - Deep dive into Contract-as-Code
-- 🌐 **[Visit choreoatlas.com](https://choreoatlas.com)** - Product overview & pricing
-- 📰 **[Subscribe to Newsletter](https://buttondown.com/choreoatlas)** - Updates & insights
+- 📖 **[Read the Documentation](https://cq365.eu.org/docs/)** - CLI guides and reference
+- 🌐 **[Visit the Website](https://cq365.eu.org/)** - Reproducible demo entry point
 - 💬 **[GitHub Discussions](https://github.com/choreoatlas2025/cli/discussions)** - Ask questions & share feedback
 
 ---
@@ -59,7 +43,7 @@ Historical: `../whitepaper/zh-CN/ChoreoAtlas-Whitepaper-1.1.md`
 
 Looking for Chinese? See README.zh-CN.md
 
-Quick links: [Business Website](https://choreoatlas.com) · [Documentation Portal](https://choreoatlas.io) · [Pricing](https://choreoatlas.com/pricing) · [Contact](https://choreoatlas.com/contact)
+Quick links: [Website](https://cq365.eu.org/) · [Documentation](https://cq365.eu.org/docs/) · [Runnable quickstart](https://github.com/choreoatlas2025/quickstart-demo) · [CE release](https://github.com/choreoatlas2025/cli/releases/tag/v0.2.0-ce.beta.1)
 
 ## 🚀 Quick Start
 

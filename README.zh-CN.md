@@ -16,6 +16,16 @@ English? See README.md
 
 ## 🚀 快速开始
 
+建议先用 Git、Docker 和 Make 运行已验证的通过/失败对照示例：
+
+```bash
+git clone https://github.com/choreoatlas2025/quickstart-demo.git
+cd quickstart-demo
+make demo
+```
+
+打开 `reports/successful-order-report.html` 与 `reports/failed-payment-report.html`。前者的 5 个流程步骤通过，后者的支付失败触发 Gate 失败。示例追踪缺少部分输入字段，因此部分前置条件显示 `SKIP`；请先阅读[快速开始指南](https://cq365.eu.org/docs/zh/guide/getting-started)。
+
 #### Docker（推荐）
 ```bash
 # 拉取并查看帮助
@@ -38,18 +48,6 @@ brew install choreoatlas
 ```bash
 alias ca=choreoatlas
 ```
-
-### 5 分钟初始化
-
-```bash
-choreoatlas init
-choreoatlas lint
-choreoatlas validate --trace traces/successful-order.trace.json
-```
-
-- `init` 会在当前目录生成 FlowSpec/ServiceSpec/示例 trace，并可选生成 GitHub Actions 工作流。
-- 加上 `--trace your.trace.json` 可复用已有 trace 自动生成契约骨架。
-- 通过 `--ci minimal|combo` 写入 `.github/workflows/choreoatlas.yml`，推送即跑 CI。
 
 ### 基本用法
 
