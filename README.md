@@ -23,7 +23,7 @@ cd quickstart-demo
 make demo
 ```
 
-Open `reports/successful-order-report.html` and `reports/failed-payment-report.html`. The first sample passes all five flow steps; the second fails the gate as expected. Some input preconditions are `SKIP` because the sample trace lacks those fields. [Read the walkthrough](https://cq365.eu.org/docs/guide/getting-started) before applying the checks to your own trace. The [quickstart workflow](https://github.com/choreoatlas2025/quickstart-demo/blob/main/.github/workflows/choreoatlas-validation.yml) runs the same command in CI.
+Open `reports/successful-order-report.html` and `reports/failed-payment-report.html`, or [view the passing report](https://cq365.eu.org/reports/successful-order-report.html) and [failing report](https://cq365.eu.org/reports/failed-payment-report.html) online first. The first sample passes all five flow steps; the second fails the gate as expected. Some input preconditions are `SKIP` because the sample trace lacks those fields. [Read the walkthrough](https://cq365.eu.org/docs/guide/getting-started) before applying the checks to your own trace. The [quickstart workflow](https://github.com/choreoatlas2025/quickstart-demo/blob/main/.github/workflows/choreoatlas-validation.yml) runs the same command in CI.
 
 ### Learn More
 

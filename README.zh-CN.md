@@ -24,7 +24,7 @@ cd quickstart-demo
 make demo
 ```
 
-打开 `reports/successful-order-report.html` 与 `reports/failed-payment-report.html`。前者的 5 个流程步骤通过，后者的支付失败触发 Gate 失败。示例追踪缺少部分输入字段，因此部分前置条件显示 `SKIP`；请先阅读[快速开始指南](https://cq365.eu.org/docs/zh/guide/getting-started)。
+打开 `reports/successful-order-report.html` 与 `reports/failed-payment-report.html`，也可以先在线查看[通过报告](https://cq365.eu.org/reports/successful-order-report.html)和[失败报告](https://cq365.eu.org/reports/failed-payment-report.html)。前者的 5 个流程步骤通过，后者的支付失败触发 Gate 失败。示例追踪缺少部分输入字段，因此部分前置条件显示 `SKIP`；请先阅读[快速开始指南](https://cq365.eu.org/docs/zh/guide/getting-started)。
 
 #### Docker（推荐）
 ```bash
