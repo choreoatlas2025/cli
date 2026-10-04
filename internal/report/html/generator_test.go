@@ -33,7 +33,7 @@ func TestBuildHTMLData(t *testing.T) {
 		{Service: "skipService", Name: "skipOp", StartNanos: 3000, EndNanos: 4000},
 	}
 
-	data := BuildHTMLData(steps, spans, nil, "CE")
+	data := BuildHTMLData(steps, spans, nil)
 
 	// Verify CE edition is set
 	if data.Edition != "CE" {
@@ -196,7 +196,7 @@ func TestCalculateSummary(t *testing.T) {
 		t.Errorf("Expected StepsFail 1, got %d", summary.StepsFail)
 	}
 
-	// Conditions statistics  
+	// Conditions statistics
 	if summary.ConditionsTotal != 4 {
 		t.Errorf("Expected ConditionsTotal 4, got %d", summary.ConditionsTotal)
 	}
@@ -216,13 +216,13 @@ func TestCalculateSummary(t *testing.T) {
 		t.Errorf("Expected StepsCoverage %f, got %f", expectedStepsCoverage, summary.StepsCoverage)
 	}
 
-	expectedConditionsRate := 2.0/3.0 // 2 pass / (2 pass + 1 fail), skip not counted
+	expectedConditionsRate := 2.0 / 3.0 // 2 pass / (2 pass + 1 fail), skip not counted
 	if summary.ConditionsRate != expectedConditionsRate {
 		t.Errorf("Expected ConditionsRate %f, got %f", expectedConditionsRate, summary.ConditionsRate)
 	}
 
 	// Duration calculation
-	expectedDuration := int64(4000) // max(5000) - min(1000)  
+	expectedDuration := int64(4000) // max(5000) - min(1000)
 	if summary.DurationNanos != expectedDuration {
 		t.Errorf("Expected DurationNanos %d, got %d", expectedDuration, summary.DurationNanos)
 	}
@@ -275,7 +275,7 @@ func TestGateResultEmbedding(t *testing.T) {
 
 func TestEmptyData(t *testing.T) {
 	// Test with empty data
-	data := BuildHTMLData([]validate.StepResult{}, []SpanInfo{}, nil, "CE")
+	data := BuildHTMLData([]validate.StepResult{}, []SpanInfo{}, nil)
 
 	if data.Summary.StepsTotal != 0 {
 		t.Errorf("Expected StepsTotal 0 for empty data, got %d", data.Summary.StepsTotal)

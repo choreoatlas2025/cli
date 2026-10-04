@@ -1,8 +1,5 @@
 // SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
 // SPDX-License-Identifier: Apache-2.0
-//go:build ce
-// +build ce
-
 package telemetry
 
 import "context"
@@ -20,33 +17,33 @@ type Event struct {
 type Client struct{}
 
 // New creates a new telemetry client
-func New() *Client { 
-	return &Client{} 
+func New() *Client {
+	return &Client{}
 }
 
 // NewClient creates a new telemetry client (compatibility)
-func NewClient() *Client { 
-	return &Client{} 
+func NewClient() *Client {
+	return &Client{}
 }
 
 // RecordEvent records an event (empty implementation for CE)
-func (c *Client) RecordEvent(ctx context.Context, event Event) error { 
-	return nil 
+func (c *Client) RecordEvent(ctx context.Context, event Event) error {
+	return nil
 }
 
 // Close closes the client (empty implementation for CE)
-func (c *Client) Close() error { 
-	return nil 
+func (c *Client) Close() error {
+	return nil
 }
 
 // IsEnabled checks if telemetry is enabled (always false for CE)
-func (c *Client) IsEnabled() bool { 
-	return false 
+func (c *Client) IsEnabled() bool {
+	return false
 }
 
 // Enable enables telemetry (empty implementation for CE)
-func (c *Client) Enable(ctx context.Context) error { 
-	return nil 
+func (c *Client) Enable(ctx context.Context) error {
+	return nil
 }
 
 // TrackEvent tracks an event (empty implementation for CE)

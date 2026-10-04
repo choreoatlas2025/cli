@@ -50,15 +50,6 @@
   .edition-badge.ce {
     background: linear-gradient(135deg, #059669, #10b981);
   }
-  .edition-badge.pro {
-    background: linear-gradient(135deg, #dc2626, #ef4444);
-  }
-  .edition-badge.pro-privacy {
-    background: linear-gradient(135deg, #7c2d12, #ea580c);
-  }
-  .edition-badge.cloud {
-    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
-  }
   .gate-alert {
     padding: 12px 16px;
     border-radius: 6px;
@@ -211,7 +202,7 @@
   <div class="header">
     <h1 class="title">FlowSpec Validation Report</h1>
     <div class="subtitle" id="generation-time"></div>
-    <div class="edition-badge" id="edition-badge"></div>
+    <div class="edition-badge ce" id="edition-badge">CE</div>
   </div>
   
   <div id="gate-status"></div>
@@ -395,15 +386,6 @@ function init() {
   // Set generation time
   document.getElementById('generation-time').textContent = 
     'Generated on ' + new Date().toLocaleString();
-  
-  // Set edition badge
-  const editionBadge = document.getElementById('edition-badge');
-  const edition = data.edition || 'Unknown';
-  editionBadge.textContent = edition;
-  
-  // Add appropriate CSS class for styling
-  const editionClass = edition.toLowerCase().replace(' ', '-');
-  editionBadge.classList.add(editionClass);
   
   renderSummary(data);
   renderTimeline(data.spans);

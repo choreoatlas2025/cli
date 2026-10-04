@@ -146,13 +146,13 @@ create_issue_and_record "pr4_sub3" \
 
 # PR#5 子 Issues (调整为验收现有功能)
 create_issue_and_record "pr5_sub1" \
-  --title "验收：build tags 剔除 telemetry/org 代码路径（CE 下 no-op）" \
-  --body $'动机：验证隐私与体积优化已实现。\n验收：nm/SBOM 不含相关符号；增补缺失的 stub。' \
+  --title "验收：默认构建为独立 CE，使用统计接口保持 no-op" \
+  --body $'动机：验证本地执行和零使用统计采集。\n验收：无需 edition build tag；检查运行时代码和依赖，无外呼采集器；兼容接口保持 no-op。' \
   --label "P1,area:release,type:refactor,CE" --milestone "$MILESTONE"
 
 create_issue_and_record "pr5_sub2" \
   --title "验收：--version 输出 vX.Y.Z-ce；报告页角标 CE" \
-  --body $'动机：验证对外可见差异已实现。\n验收：测试覆盖；截图/快照更新。' \
+  --body $'动机：验证 CE 标识一致。\n验收：测试覆盖；截图/快照更新。' \
   --label "P1,area:report,type:feat,CE" --milestone "$MILESTONE"
 
 create_issue_and_record "pr5_sub3" \
@@ -173,7 +173,7 @@ create_issue_and_record "pr6_sub2" \
 
 create_issue_and_record "pr6_sub3" \
   --title "报告：覆盖率/摘要在 CE 构建下稳定（快照）" \
-  --body $'动机：避免 Pro 代码路径泄漏。\n验收：HTML/JSON/JUnit 三格式快照一致。' \
+  --body $'动机：保持本地报告行为稳定。\n验收：HTML/JSON/JUnit 三格式快照一致。' \
   --label "P1,area:report,type:fix,CE" --milestone "$MILESTONE"
 
 create_issue_and_record "pr6_sub4" \
@@ -276,16 +276,16 @@ pr5_sub2_id=$(get_issue_id "pr5_sub2")
 pr5_sub3_id=$(get_issue_id "pr5_sub3")
 
 create_issue_and_record "pr5_tracking" \
-  --title "[CE][PR#5] CE 构建隔离与可见差异验收（build tag、version、报告角标）" \
-  --body "目标：验收并完善独立 CE 产物与可见差异。
+  --title "[CE][PR#5] 独立 CE 默认构建验收（version、报告角标、零使用统计采集）" \
+  --body "目标：验收并完善独立 CE 产物与一致标识。
 
 **子任务**
-- [ ] #$pr5_sub1_id: 验收 //go:build ce 隔离 telemetry/org（补充 no-op stub）
+- [ ] #$pr5_sub1_id: 验收默认构建无需 edition build tag；使用统计接口保持 no-op
 - [ ] #$pr5_sub2_id: 验收 --version 输出 vX.Y.Z-ce 与 HTML 报告角标 CE
 - [ ] #$pr5_sub3_id: 文档：安装三通道 & 零遥测声明
 
 **验收**
-- go build -tags ce 产物不含遥测依赖
+- 默认 go build 产物无使用统计采集器或外呼路径
 - 报告/CLI 均显式 CE 标识
 - 测试覆盖完整" \
   --label "P1,area:release,area:report,area:docs,type:feat,CE" --milestone "$MILESTONE"

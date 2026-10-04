@@ -40,24 +40,24 @@ func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult,
 
 // CoverageSummary 覆盖度总结
 type CoverageSummary struct {
-	StepsTotal       int               `json:"stepsTotal"`
-	StepsPass        int               `json:"stepsPass"`
-	StepsFail        int               `json:"stepsFail"`
-	StepsSkip        int               `json:"stepsSkip"`
-	ConditionsTotal  int               `json:"conditionsTotal"`
-	ConditionsPass   int               `json:"conditionsPass"`
-	ConditionsFail   int               `json:"conditionsFail"`
-	ConditionsSkip   int               `json:"conditionsSkip"`
-	UncoveredSteps   []string          `json:"uncoveredSteps"`
-	CoverageRate     float64           `json:"coverageRate"`
-	ServiceCoverage  map[string]int    `json:"serviceCoverage"`
+	StepsTotal      int            `json:"stepsTotal"`
+	StepsPass       int            `json:"stepsPass"`
+	StepsFail       int            `json:"stepsFail"`
+	StepsSkip       int            `json:"stepsSkip"`
+	ConditionsTotal int            `json:"conditionsTotal"`
+	ConditionsPass  int            `json:"conditionsPass"`
+	ConditionsFail  int            `json:"conditionsFail"`
+	ConditionsSkip  int            `json:"conditionsSkip"`
+	UncoveredSteps  []string       `json:"uncoveredSteps"`
+	CoverageRate    float64        `json:"coverageRate"`
+	ServiceCoverage map[string]int `json:"serviceCoverage"`
 	// Baseline comparison fields
-	BaselineStepsCoverage    float64 `json:"baselineStepsCoverage,omitempty"`
-	StepsDeltaAbs           float64 `json:"stepsDeltaAbs,omitempty"`
-	StepsDeltaPct           float64 `json:"stepsDeltaPct,omitempty"`
-	BaselineConditionsRate   float64 `json:"baselineConditionsRate,omitempty"`
-	ConditionsDeltaAbs      float64 `json:"conditionsDeltaAbs,omitempty"`
-	ConditionsDeltaPct      float64 `json:"conditionsDeltaPct,omitempty"`
+	BaselineStepsCoverage  float64 `json:"baselineStepsCoverage,omitempty"`
+	StepsDeltaAbs          float64 `json:"stepsDeltaAbs,omitempty"`
+	StepsDeltaPct          float64 `json:"stepsDeltaPct,omitempty"`
+	BaselineConditionsRate float64 `json:"baselineConditionsRate,omitempty"`
+	ConditionsDeltaAbs     float64 `json:"conditionsDeltaAbs,omitempty"`
+	ConditionsDeltaPct     float64 `json:"conditionsDeltaPct,omitempty"`
 }
 
 // writeJSONReport 写入 JSON 格式报告
@@ -195,14 +195,14 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 	// Test cases
 	for _, s := range steps {
 		sb.WriteString(fmt.Sprintf(`  <testcase name="%s" classname="%s">`, xmlEscape(s.Step), xmlEscape(s.Call)))
-		
+
 		if s.Status == "FAIL" {
 			sb.WriteString("\n")
 			sb.WriteString(fmt.Sprintf(`    <failure message="%s" type="ValidationFailure">%s</failure>`,
 				xmlEscape(s.Message), xmlEscape(s.Message)))
 			sb.WriteString("\n  ")
 		}
-		
+
 		// 添加条件详情到 system-out
 		if len(s.Conditions) > 0 {
 			sb.WriteString("\n")
@@ -210,7 +210,7 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 			sb.WriteString(fmt.Sprintf(`    <system-out><![CDATA[%s]]></system-out>`, conditionsJSON))
 			sb.WriteString("\n  ")
 		}
-		
+
 		sb.WriteString("</testcase>")
 		sb.WriteString("\n")
 	}
@@ -243,7 +243,7 @@ func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Spa
 	}
 
 	// Build HTML data with gate result and CE edition
-	data := html.BuildHTMLData(steps, spanInfos, gateResult, "CE")
+	data := html.BuildHTMLData(steps, spanInfos, gateResult)
 
 	// Write HTML report
 	return html.WriteHTMLReport(path, data)
@@ -258,7 +258,7 @@ func calculateCoverageSummary(steps []validate.StepResult) CoverageSummary {
 
 	for _, step := range steps {
 		summary.StepsTotal++
-		
+
 		switch step.Status {
 		case "PASS":
 			summary.StepsPass++
