@@ -5,6 +5,7 @@ package baseline
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,9 +20,9 @@ func TestRecordBaseline(t *testing.T) {
 			Title: "Test Flow",
 		},
 		Flow: []spec.FlowStep{
-			{Step: "step1"},
-			{Step: "step2"},
-			{Step: "step3"},
+			{Step: "step1", Call: "svc.step1"},
+			{Step: "step2", Call: "svc.step2"},
+			{Step: "step3", Call: "svc.step3"},
 		},
 	}
 
@@ -36,7 +37,7 @@ func TestRecordBaseline(t *testing.T) {
 			},
 		},
 		{
-			Step:   "step2", 
+			Step:   "step2",
 			Status: "PASS",
 			Conditions: []validate.ConditionResult{
 				{Kind: "post", Name: "cond3", Status: "FAIL"},
@@ -56,7 +57,12 @@ func TestRecordBaseline(t *testing.T) {
 		t.Fatalf("Failed to create temp flow file: %v", err)
 	}
 
-	// Test recording baseline
+	// Failed or internally inconsistent results cannot become a baseline.
+	if _, err := RecordBaseline(flowSpec, results, flowPath); err == nil {
+		t.Fatal("expected failed results to be rejected")
+	}
+	results[1].Conditions[0].Status = "PASS"
+	results[2].Status = "PASS"
 	baseline, err := RecordBaseline(flowSpec, results, flowPath)
 	if err != nil {
 		t.Fatalf("RecordBaseline failed: %v", err)
@@ -71,12 +77,12 @@ func TestRecordBaseline(t *testing.T) {
 		t.Errorf("Expected StepsTotal 3, got %d", baseline.StepsTotal)
 	}
 
-	if len(baseline.CoveredSteps) != 2 {
-		t.Errorf("Expected 2 covered steps, got %d", len(baseline.CoveredSteps))
+	if len(baseline.CoveredSteps) != 3 {
+		t.Errorf("Expected 3 covered steps, got %d", len(baseline.CoveredSteps))
 	}
 
 	// Verify covered steps contain the correct ones
-	expectedSteps := map[string]bool{"step1": true, "step2": true}
+	expectedSteps := map[string]bool{"step1": true, "step2": true, "step3": true}
 	for _, step := range baseline.CoveredSteps {
 		if !expectedSteps[step] {
 			t.Errorf("Unexpected covered step: %s", step)
@@ -98,17 +104,17 @@ func TestRecordBaseline(t *testing.T) {
 	}
 
 	step2Conditions := baseline.Conditions["step2"]
-	if step2Conditions["post:cond3"] != false {
-		t.Errorf("Expected step2 cond3 to be false, got %v", step2Conditions["post:cond3"])
+	if step2Conditions["post:cond3"] != true {
+		t.Errorf("Expected step2 cond3 to be true, got %v", step2Conditions["post:cond3"])
 	}
 }
 
 func TestEvaluateGate(t *testing.T) {
 	tests := []struct {
-		name        string
-		results     []validate.StepResult
-		thresholds  ThresholdConfig
-		expectPass  bool
+		name             string
+		results          []validate.StepResult
+		thresholds       ThresholdConfig
+		expectPass       bool
 		expectViolations int
 	}{
 		{
@@ -122,10 +128,10 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.9,
 			},
-			expectPass: true,
+			expectPass:       true,
 			expectViolations: 0,
 		},
 		{
@@ -137,10 +143,10 @@ func TestEvaluateGate(t *testing.T) {
 				{Step: "step2", Status: "FAIL"},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.5, // Lower threshold so conditions pass
 			},
-			expectPass: false,
+			expectPass:       false,
 			expectViolations: 1,
 		},
 		{
@@ -154,10 +160,10 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.9,
 			},
-			expectPass: false,
+			expectPass:       false,
 			expectViolations: 1,
 		},
 		{
@@ -168,11 +174,11 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.5,
+				StepsThreshold:      0.5,
 				ConditionsThreshold: 0.9,
-				SkipAsFail: true,
+				SkipAsFail:          true,
 			},
-			expectPass: false,
+			expectPass:       false,
 			expectViolations: 1,
 		},
 	}
@@ -186,7 +192,7 @@ func TestEvaluateGate(t *testing.T) {
 			}
 
 			if len(result.Violations) != tt.expectViolations {
-				t.Errorf("Expected %d violations, got %d: %v", 
+				t.Errorf("Expected %d violations, got %d: %v",
 					tt.expectViolations, len(result.Violations), result.Violations)
 			}
 
@@ -204,14 +210,15 @@ func TestEvaluateGate(t *testing.T) {
 
 func TestSaveAndLoadBaseline(t *testing.T) {
 	baseline := &BaselineData{
-		SchemaVersion: "1",
+		SchemaVersion: "2",
 		FlowID:        "Test Flow",
-		FlowHash:      "sha256:abc123",
+		FlowHash:      "sha256:" + strings.Repeat("a", 64),
+		ServiceHashes: map[string]string{},
 		GeneratedAt:   time.Now().UTC(),
 		StepsTotal:    3,
-		CoveredSteps:  []string{"step1", "step2"},
+		CoveredSteps:  []string{"step1", "step2", "step3"},
 		Conditions: map[string]map[string]bool{
-			"step1": {"post:cond1": true, "post:cond2": false},
+			"step1": {"post:cond1": true, "post:cond2": true},
 		},
 	}
 
@@ -240,7 +247,7 @@ func TestSaveAndLoadBaseline(t *testing.T) {
 	}
 
 	if len(loadedBaseline.CoveredSteps) != len(baseline.CoveredSteps) {
-		t.Errorf("CoveredSteps length mismatch: expected %d, got %d", 
+		t.Errorf("CoveredSteps length mismatch: expected %d, got %d",
 			len(baseline.CoveredSteps), len(loadedBaseline.CoveredSteps))
 	}
 
@@ -250,22 +257,22 @@ func TestSaveAndLoadBaseline(t *testing.T) {
 	}
 
 	step1Conds := loadedBaseline.Conditions["step1"]
-	if step1Conds["post:cond1"] != true || step1Conds["post:cond2"] != false {
+	if step1Conds["post:cond1"] != true || step1Conds["post:cond2"] != true {
 		t.Errorf("Conditions not loaded correctly")
 	}
 }
 
 func TestDefaultThresholds(t *testing.T) {
 	thresholds := DefaultThresholds()
-	
+
 	if thresholds.StepsThreshold != 0.9 {
 		t.Errorf("Expected default StepsThreshold 0.9, got %f", thresholds.StepsThreshold)
 	}
-	
+
 	if thresholds.ConditionsThreshold != 0.95 {
 		t.Errorf("Expected default ConditionsThreshold 0.95, got %f", thresholds.ConditionsThreshold)
 	}
-	
+
 	if thresholds.SkipAsFail != false {
 		t.Errorf("Expected default SkipAsFail false, got %v", thresholds.SkipAsFail)
 	}

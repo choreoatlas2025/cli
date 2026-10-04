@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/spec"
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -16,12 +17,28 @@ var htmlTemplate string
 
 // HTMLData represents the data structure passed to the HTML template
 type HTMLData struct {
+	validate.Outcome
+	ExitCode   int                   `json:"exitCode"`
+	Inputs     *InputBinding         `json:"inputs,omitempty"`
 	Summary    CoverageSummary       `json:"summary"`
 	Steps      []validate.StepResult `json:"steps"`
 	Spans      []SpanInfo            `json:"spans"`
 	Graph      interface{}           `json:"graph,omitempty"` // For DAG mode
 	GateResult *GateResult           `json:"gateResult,omitempty"`
 	Edition    string                `json:"edition"` // Always CE; retained in the report JSON format.
+}
+
+type InputBinding struct {
+	Contract      spec.ContractIdentity `json:"contract"`
+	TraceHash     string                `json:"traceHash"`
+	BaselineHash  string                `json:"baselineHash,omitempty"`
+	Version       string                `json:"version"`
+	GitCommit     string                `json:"gitCommit"`
+	Semantic      bool                  `json:"semantic"`
+	Causality     string                `json:"causality"`
+	ToleranceMs   int64                 `json:"causalityToleranceMs"`
+	ValidatorHash string                `json:"validatorHash"`
+	Policy        map[string]any        `json:"policy"`
 }
 
 // CoverageSummary represents coverage statistics for HTML display
@@ -74,8 +91,13 @@ func WriteHTMLReport(outputPath string, data HTMLData) error {
 // BuildHTMLData creates HTMLData from validation results and spans
 func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *GateResult) HTMLData {
 	summary := calculateSummary(steps, spans)
+	checked, passed := false, true
+	if gateResult != nil {
+		checked, passed = gateResult.Checked, gateResult.Passed
+	}
 
 	return HTMLData{
+		Outcome:    validate.FinalOutcome(steps, checked, passed),
 		Summary:    summary,
 		Steps:      steps,
 		Spans:      spans,

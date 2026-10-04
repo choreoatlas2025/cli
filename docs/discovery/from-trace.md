@@ -19,6 +19,13 @@ graph LR
    - FlowSpec defining the choreography
    - ServiceSpec files for each participating service
 
+Generation and schema/lint checks run in a temporary location before destination
+files are replaced. A validation failure leaves existing contracts unchanged.
+Outputs are prepared together; ordinary commit errors roll back completed file
+replacements. This also applies with `--no-validate`, which skips schema/lint checks
+but retains staged writes and rollback. ServiceSpec paths resolve relative to the
+generated FlowSpec, including when outputs use different directories.
+
 ## Basic Usage
 
 ```bash
@@ -54,7 +61,7 @@ The input trace.json should follow this structure:
       "service": "serviceName",
       "startNanos": 1000000,
       "endNanos": 2000000,
-      "tags": {
+      "attributes": {
         "http.status_code": 200,
         "response.body": {"key": "value"}
       }
@@ -75,7 +82,7 @@ The input trace.json should follow this structure:
       "service": "orderService",
       "startNanos": 1000,
       "endNanos": 2000,
-      "tags": {
+      "attributes": {
         "http.status_code": 201,
         "response.body": {
           "orderId": "ORD-123",
@@ -88,7 +95,7 @@ The input trace.json should follow this structure:
       "service": "inventoryService",
       "startNanos": 3000,
       "endNanos": 4000,
-      "tags": {
+      "attributes": {
         "http.status_code": 200,
         "response.body": {
           "available": true,
@@ -177,7 +184,7 @@ The current discovery implementation has these limitations:
 ### 1. Use Representative Traces
 - Include both success and failure scenarios
 - Cover all typical execution paths
-- Ensure traces contain complete tag data
+- Ensure traces contain complete attribute data
 
 ### 2. Iterative Refinement
 ```bash

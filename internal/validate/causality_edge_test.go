@@ -10,11 +10,11 @@ import (
 
 func TestValidateEdgeConstraints(t *testing.T) {
 	tests := []struct {
-		name           string
-		spans          []trace.Span
-		toleranceMs    int64
+		name             string
+		spans            []trace.Span
+		toleranceMs      int64
 		expectViolations int
-		violationTypes []string
+		violationTypes   []string
 	}{
 		{
 			name: "no violations - proper parent-child timing",
@@ -57,7 +57,7 @@ func TestValidateEdgeConstraints(t *testing.T) {
 				{
 					Name:       "child",
 					Service:    "serviceB",
-					StartNanos: 900000000, // starts before parent
+					StartNanos: 900000000,  // starts before parent
 					EndNanos:   2100000000, // ends after parent
 					Attributes: map[string]any{
 						"otlp.span_id":        "span2",
@@ -92,7 +92,7 @@ func TestValidateEdgeConstraints(t *testing.T) {
 				},
 			},
 			toleranceMs:      100, // 100ms tolerance
-			expectViolations: 0,  // No explicit follows relationship, so no violation
+			expectViolations: 0,   // No explicit follows relationship, so no violation
 			violationTypes:   nil,
 		},
 		{
@@ -337,13 +337,14 @@ func TestGetTopologicalOrder(t *testing.T) {
 	// Verify A comes before B and C
 	indexA, indexB, indexC, indexD := -1, -1, -1, -1
 	for i, id := range order {
-		if id == "A" {
+		switch id {
+		case "A":
 			indexA = i
-		} else if id == "B" {
+		case "B":
 			indexB = i
-		} else if id == "C" {
+		case "C":
 			indexC = i
-		} else if id == "D" {
+		case "D":
 			indexD = i
 		}
 	}

@@ -9,7 +9,7 @@
 
 Map. Verify. Steer your cross-service choreography — a developer-friendly, Swiss‑army‑knife style CLI for Contract‑as‑Code.
 
-This is the Community Edition (CE): zero telemetry, fully offline.
+This is the Community Edition (CE): zero product usage telemetry, fully offline.
 
 ---
 
@@ -331,6 +331,8 @@ choreoatlas validate
   --baseline-missing string  Strategy when baseline missing: fail|treat-as-absolute (default "fail")
   --threshold-steps float    Step coverage threshold (default 0.9)
   --threshold-conds float    Condition pass threshold (default 0.95)
+  --max-steps-degradation float  Maximum relative coverage degradation with baseline (default 0)
+  --max-conds-degradation float  Maximum relative condition rate degradation with baseline (default 0)
   --skip-as-fail        Treat SKIP conditions as FAIL
   --report-format string Report format: json|junit|html (optional)
   --report-out string    Report output path (required when using --report-format)
@@ -474,6 +476,10 @@ The default build provides local dual-contract discovery and validation, tempora
 and causal checks, DAG support, HTML/JSON/JUnit reports, and basic baseline gates.
 All validation inputs and generated reports remain local. Builds and reports
 identify themselves as CE.
+
+CE accepts local trace JSON with a top-level `spans` array. It does not provide
+OTLP receivers, exporters, or direct OTLP file import. See the
+[trace input format](docs/reference/cli/validate.md#trace-input-format).
 
 See [DECISIONS.md](DECISIONS.md) for the repository's scope and maintenance rules.
 

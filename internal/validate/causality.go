@@ -18,21 +18,21 @@ type CallGraph struct {
 
 // CallNode 表示调用图中的节点
 type CallNode struct {
-	SpanID     string            `json:"spanId"`
-	TraceID    string            `json:"traceId"`
-	Service    string            `json:"service"`
-	Operation  string            `json:"operation"`
-	StartNanos int64             `json:"startNanos"`
-	EndNanos   int64             `json:"endNanos"`
-	Attributes map[string]any    `json:"attributes"`
-	Children   []*CallNode       `json:"children,omitempty"`
-	Parent     *CallNode         `json:"parent,omitempty"`
+	SpanID     string         `json:"spanId"`
+	TraceID    string         `json:"traceId"`
+	Service    string         `json:"service"`
+	Operation  string         `json:"operation"`
+	StartNanos int64          `json:"startNanos"`
+	EndNanos   int64          `json:"endNanos"`
+	Attributes map[string]any `json:"attributes"`
+	Children   []*CallNode    `json:"children,omitempty"`
+	Parent     *CallNode      `json:"parent,omitempty"`
 }
 
 // CallEdge 表示调用关系边
 type CallEdge struct {
-	From        string `json:"from"`
-	To          string `json:"to"`
+	From         string `json:"from"`
+	To           string `json:"to"`
 	Relationship string `json:"relationship"` // "parent", "follows", "concurrent"
 }
 
@@ -61,6 +61,9 @@ func BuildCallGraph(spans []trace.Span) (*CallGraph, error) {
 			Attributes: span.Attributes,
 			Children:   make([]*CallNode, 0),
 		}
+		if _, exists := graph.Nodes[spanID]; exists {
+			return nil, fmt.Errorf("duplicate span identity: %s", spanID)
+		}
 		graph.Nodes[spanID] = node
 	}
 
@@ -68,16 +71,16 @@ func BuildCallGraph(spans []trace.Span) (*CallGraph, error) {
 	for _, span := range spans {
 		spanID := getSpanID(span)
 		parentSpanID := getParentSpanID(span)
-		
+
 		if parentSpanID != "" && parentSpanID != spanID {
 			if parentNode, exists := graph.Nodes[parentSpanID]; exists {
 				if childNode, exists := graph.Nodes[spanID]; exists {
 					childNode.Parent = parentNode
 					parentNode.Children = append(parentNode.Children, childNode)
-					
+
 					graph.Edges = append(graph.Edges, &CallEdge{
 						From:         parentSpanID,
-						To:          spanID,
+						To:           spanID,
 						Relationship: "parent",
 					})
 				}
@@ -106,21 +109,21 @@ func buildTemporalEdges(graph *CallGraph) {
 	for i := 0; i < len(allNodes)-1; i++ {
 		current := allNodes[i]
 		next := allNodes[i+1]
-		
+
 		// 如果两个节点有相同的父节点或都是顶级节点
 		if hasSameParent(current, next) {
 			if current.EndNanos <= next.StartNanos {
 				// 顺序执行
 				graph.Edges = append(graph.Edges, &CallEdge{
 					From:         current.SpanID,
-					To:          next.SpanID,
+					To:           next.SpanID,
 					Relationship: "follows",
 				})
 			} else if isOverlapping(current, next) {
 				// 并发执行
 				graph.Edges = append(graph.Edges, &CallEdge{
 					From:         current.SpanID,
-					To:          next.SpanID,
+					To:           next.SpanID,
 					Relationship: "concurrent",
 				})
 			}
@@ -128,153 +131,148 @@ func buildTemporalEdges(graph *CallGraph) {
 	}
 }
 
-// CheckCausality 检查因果关系和并发约束
-func CheckCausality(flow *spec.FlowSpec, graph *CallGraph) ([]StepResult, bool) {
-	var results []StepResult
-	allPassed := true
-
-	// 处理常规流程步骤
-	for _, step := range flow.Flow {
-		if len(step.Parallel) > 0 {
-			// 并发步骤组 - 优先处理并发步骤
-			parallelResults := checkParallelSteps(step.Parallel, graph)
-			results = append(results, parallelResults...)
-			for _, pr := range parallelResults {
-				if pr.Status != "PASS" {
-					allPassed = false
-				}
-			}
-		} else if step.Step != "" && step.Call != "" {
-			// 常规步骤
-			result := checkSingleStep(step, graph)
-			results = append(results, result)
-			if result.Status != "PASS" {
-				allPassed = false
-			}
-		}
-	}
-
-	return results, allPassed
+// matchedFlowStep keeps structural matching and semantic evaluation bound to
+// the same call instance. A matched span can be consumed only once.
+type matchedFlowStep struct {
+	step   spec.FlowStep
+	node   *CallNode
+	result StepResult
 }
 
-// checkSingleStep 检查单个步骤
-func checkSingleStep(step spec.FlowStep, graph *CallGraph) StepResult {
+type flowMatcher struct {
+	nodes    []*CallNode
+	used     map[*CallNode]bool
+	previous []*CallNode
+}
+
+func newFlowMatcher(graph *CallGraph) *flowMatcher {
+	m := &flowMatcher{used: map[*CallNode]bool{}}
+	for _, node := range graph.Nodes {
+		m.nodes = append(m.nodes, node)
+	}
+	sort.Slice(m.nodes, func(i, j int) bool {
+		a, b := m.nodes[i], m.nodes[j]
+		if a.StartNanos != b.StartNanos {
+			return a.StartNanos < b.StartNanos
+		}
+		if a.EndNanos != b.EndNanos {
+			return a.EndNanos < b.EndNanos
+		}
+		return a.SpanID < b.SpanID
+	})
+	return m
+}
+
+func (m *flowMatcher) match(step spec.FlowStep) matchedFlowStep {
+	r := matchedFlowStep{step: step, result: StepResult{Step: step.Step, Call: step.Call, Status: "FAIL"}}
 	svc, op, err := splitCall(step.Call)
 	if err != nil {
-		return StepResult{
-			Step:    step.Step,
-			Call:    step.Call,
-			Status:  "FAIL",
-			Message: fmt.Sprintf("Failed to parse call: %v", err),
-		}
+		r.result.Message = err.Error()
+		return r
 	}
-
-	// 在图中查找匹配的节点
-	var matchedNode *CallNode
-	for _, node := range graph.Nodes {
-		if normalize(node.Service) == normalize(svc) && normalize(node.Operation) == normalize(op) {
-			matchedNode = node
-			break
-		}
-	}
-
-	if matchedNode == nil {
-		return StepResult{
-			Step:    step.Step,
-			Call:    step.Call,
-			Status:  "FAIL",
-			Message: "No matching span found in trace",
-		}
-	}
-
-	return StepResult{
-		Step:   step.Step,
-		Call:   step.Call,
-		Status: "PASS",
-	}
-}
-
-// checkParallelSteps 检查并发步骤组
-func checkParallelSteps(parallelSteps []spec.FlowStep, graph *CallGraph) []StepResult {
-	var results []StepResult
-	var matchedNodes []*CallNode
-
-	// 找到所有并发步骤对应的节点
-	for _, step := range parallelSteps {
-		svc, op, err := splitCall(step.Call)
-		if err != nil {
-			results = append(results, StepResult{
-				Step:    step.Step,
-				Call:    step.Call,
-				Status:  "FAIL",
-				Message: fmt.Sprintf("Failed to parse call: %v", err),
-			})
+	for _, node := range m.nodes {
+		if m.used[node] || normalize(node.Service) != normalize(svc) || normalize(node.Operation) != normalize(op) {
 			continue
 		}
-
-		var matchedNode *CallNode
-		for _, node := range graph.Nodes {
-			if normalize(node.Service) == normalize(svc) && normalize(node.Operation) == normalize(op) {
-				matchedNode = node
-				break
+		valid := true
+		for _, pred := range m.previous {
+			switch GlobalCausalityMode {
+			case CausalityStrict:
+				valid = valid && node.Parent == pred
+			case CausalityTemporal:
+				valid = valid && node.StartNanos >= pred.StartNanos
 			}
 		}
+		if !valid {
+			continue
+		}
+		m.used[node] = true
+		r.node, r.result.Status = node, "PASS"
+		return r
+	}
+	r.result.Message = "no unused matching span satisfies step order and causality"
+	return r
+}
 
-		if matchedNode == nil {
-			results = append(results, StepResult{
-				Step:    step.Step,
-				Call:    step.Call,
-				Status:  "FAIL",
-				Message: "No matching span found in trace",
-			})
-		} else {
-			matchedNodes = append(matchedNodes, matchedNode)
-			results = append(results, StepResult{
-				Step:   step.Step,
-				Call:   step.Call,
-				Status: "PASS",
-			})
+func (m *flowMatcher) parallel(steps []spec.FlowStep) []matchedFlowStep {
+	var matched []matchedFlowStep
+	var nodes []*CallNode
+	for _, step := range steps {
+		r := m.match(step)
+		matched = append(matched, r)
+		if r.node != nil {
+			nodes = append(nodes, r.node)
 		}
 	}
-
-	// 验证并发约束：所有步骤应该在时间上重叠或属于同一父span
-	if len(matchedNodes) > 1 {
-		if !validateConcurrency(matchedNodes) {
-			// 更新所有相关结果为失败
-			for i := range results {
-				if results[i].Status == "PASS" {
-					results[i].Status = "FAIL"
-					results[i].Message = "Concurrency constraint violation: steps not executed concurrently"
-				}
+	if !validateConcurrency(nodes) {
+		for i := range matched {
+			if matched[i].result.Status == "PASS" {
+				matched[i].result.Status = "FAIL"
+				matched[i].result.Message = "concurrency constraint violation: spans do not overlap"
 			}
 		}
 	}
+	if len(nodes) > 0 {
+		m.previous = nodes
+	}
+	return matched
+}
 
+func matchFlowSteps(flow *spec.FlowSpec, graph *CallGraph) []matchedFlowStep {
+	m := newFlowMatcher(graph)
+	var matched []matchedFlowStep
+	for _, step := range flow.Flow {
+		if step.Call != "" || len(step.Parallel) == 0 {
+			r := m.match(step)
+			matched = append(matched, r)
+			if r.node != nil {
+				m.previous = []*CallNode{r.node}
+			}
+		}
+		if len(step.Parallel) > 0 {
+			matched = append(matched, m.parallel(step.Parallel)...)
+		}
+	}
+	return matched
+}
+
+// CheckCausality validates every call, including calls attached to parallel
+// containers, with one-to-one matching and the configured dependency mode.
+func CheckCausality(flow *spec.FlowSpec, graph *CallGraph) ([]StepResult, bool) {
+	var results []StepResult
+	for _, matched := range matchFlowSteps(flow, graph) {
+		results = append(results, matched.result)
+	}
+	return results, AllStepsPassed(results)
+}
+
+func checkSingleStep(step spec.FlowStep, graph *CallGraph) StepResult {
+	return newFlowMatcher(graph).match(step).result
+}
+
+func checkParallelSteps(steps []spec.FlowStep, graph *CallGraph) []StepResult {
+	var results []StepResult
+	for _, matched := range newFlowMatcher(graph).parallel(steps) {
+		results = append(results, matched.result)
+	}
 	return results
 }
 
-// validateConcurrency 验证节点是否满足并发约束
 func validateConcurrency(nodes []*CallNode) bool {
-	if len(nodes) <= 1 {
-		return true
-	}
-
-	// 检查是否有时间重叠
-	for i := 0; i < len(nodes); i++ {
+	for i := range nodes {
 		for j := i + 1; j < len(nodes); j++ {
-			if !isOverlapping(nodes[i], nodes[j]) && !hasSameParent(nodes[i], nodes[j]) {
+			if !isOverlapping(nodes[i], nodes[j]) {
 				return false
 			}
 		}
 	}
-
 	return true
 }
 
 // 辅助函数
 func getSpanID(span trace.Span) string {
 	if spanID, exists := span.Attributes["otlp.span_id"]; exists {
-		if str, ok := spanID.(string); ok {
+		if str, ok := spanID.(string); ok && str != "" {
 			return str
 		}
 	}
@@ -371,7 +369,7 @@ func GetCallGraphStats(graph *CallGraph) map[string]any {
 type EdgeViolation struct {
 	From    string `json:"from"`
 	To      string `json:"to"`
-	Type    string `json:"type"`    // "cycle", "causality", "overlap"
+	Type    string `json:"type"` // "cycle", "causality", "overlap"
 	Message string `json:"message"`
 }
 
@@ -539,7 +537,7 @@ func (g *CallGraph) GetTopologicalOrder() ([]string, error) {
 	}
 
 	if processedCount != len(g.Nodes) {
-		return nil, fmt.Errorf("Cannot complete topological sort: cycle detected in graph")
+		return nil, fmt.Errorf("cannot complete topological sort: cycle detected in graph")
 	}
 
 	return sorted, nil

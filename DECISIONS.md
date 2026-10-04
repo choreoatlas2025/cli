@@ -27,3 +27,14 @@ historical analysis service.
 
 Scope changes must update this decision and document their compatibility impact.
 Use the README and privacy policy to describe the current executable's behavior.
+
+## 2026-10-04: Local Trace Input Boundary
+
+The CE CLI accepts local trace JSON in the repository's native format, with a
+top-level `spans` array. CE does not provide OTLP receivers, OTLP exporters, or
+direct import of OTLP JSON or protobuf payloads. Live telemetry collection is
+outside its scope.
+
+Native trace attributes may originate from OpenTelemetry instrumentation. They
+remain valid local inputs; their presence does not imply OTLP protocol support
+or product usage collection. Convert other formats outside CE before validation.

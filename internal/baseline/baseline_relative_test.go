@@ -10,13 +10,13 @@ import (
 
 func TestEvaluateGate_RelativeMode(t *testing.T) {
 	tests := []struct {
-		name               string
-		results            []validate.StepResult
-		thresholds         ThresholdConfig
-		baseline           *BaselineData
-		expectPass         bool
-		expectStepsDelta   float64
-		expectCondsDelta   float64
+		name             string
+		results          []validate.StepResult
+		thresholds       ThresholdConfig
+		baseline         *BaselineData
+		expectPass       bool
+		expectStepsDelta float64
+		expectCondsDelta float64
 	}{
 		{
 			name: "relative mode - no degradation",
@@ -26,8 +26,10 @@ func TestEvaluateGate_RelativeMode(t *testing.T) {
 				{Step: "step3", Status: "PASS", Conditions: []validate.ConditionResult{{Status: "PASS"}}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold:      0.05, // Allow 5% degradation
-				ConditionsThreshold: 0.03, // Allow 3% degradation
+				StepsThreshold:           0.9,
+				MaxStepsDegradation:      0.05, // Allow 5% degradation
+				ConditionsThreshold:      0.95,
+				MaxConditionsDegradation: 0.03, // Allow 3% degradation
 			},
 			baseline: &BaselineData{
 				StepsTotal:   3,
@@ -50,8 +52,10 @@ func TestEvaluateGate_RelativeMode(t *testing.T) {
 				{Step: "step3", Status: "FAIL", Conditions: []validate.ConditionResult{{Status: "PASS"}}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold:      0.35, // Allow 35% degradation (baseline: 100%, current: 66.7%, delta: -33.3%)
-				ConditionsThreshold: 0.05,
+				StepsThreshold:           0.6,
+				MaxStepsDegradation:      0.35, // Allow 35% degradation (baseline: 100%, current: 66.7%, delta: -33.3%)
+				ConditionsThreshold:      0.9,
+				MaxConditionsDegradation: 0.05,
 			},
 			baseline: &BaselineData{
 				StepsTotal:   3,
@@ -74,8 +78,10 @@ func TestEvaluateGate_RelativeMode(t *testing.T) {
 				{Step: "step3", Status: "FAIL", Conditions: []validate.ConditionResult{{Status: "FAIL"}}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold:      0.30, // Allow 30% degradation (baseline: 100%, current: 33.3%, delta: -66.7%)
-				ConditionsThreshold: 0.05,
+				StepsThreshold:           0.6,
+				MaxStepsDegradation:      0.30, // Allow 30% degradation (baseline: 100%, current: 33.3%, delta: -66.7%)
+				ConditionsThreshold:      0.9,
+				MaxConditionsDegradation: 0.05,
 			},
 			baseline: &BaselineData{
 				StepsTotal:   3,
@@ -98,8 +104,10 @@ func TestEvaluateGate_RelativeMode(t *testing.T) {
 				{Step: "step3", Status: "PASS", Conditions: []validate.ConditionResult{{Status: "PASS"}}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold:      0.10,
-				ConditionsThreshold: 0.10,
+				StepsThreshold:           0.9,
+				MaxStepsDegradation:      0.10,
+				ConditionsThreshold:      0.95,
+				MaxConditionsDegradation: 0.10,
 			},
 			baseline: &BaselineData{
 				StepsTotal:   3,

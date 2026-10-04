@@ -109,7 +109,7 @@ func TestWriteHTMLReport(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-html-report.html"
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	err := WriteHTMLReport(tempFile, data)
 	if err != nil {
@@ -248,7 +248,7 @@ func TestGateResultEmbedding(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-gate-report.html"
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	err := WriteHTMLReport(tempFile, data)
 	if err != nil {

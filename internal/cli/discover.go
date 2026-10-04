@@ -6,7 +6,7 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -15,13 +15,13 @@ import (
 )
 
 func runDiscover(args []string) {
-    fs := flag.NewFlagSet("discover", flag.ExitOnError)
-    tracePath := fs.String("trace", "", "trace.json file path")
-    out := fs.String("out", "discovered.flowspec.yaml", "FlowSpec output path")
-    outServices := fs.String("out-services", "./services", "ServiceSpec output directory")
-    title := fs.String("title", "Flow generated from trace", "FlowSpec title")
-    noValidate := fs.Bool("no-validate", false, "Skip schema + lint validation gate (not recommended)")
-    _ = fs.Parse(args)
+	fs := flag.NewFlagSet("discover", flag.ExitOnError)
+	tracePath := fs.String("trace", "", "trace.json file path")
+	out := fs.String("out", "discovered.flowspec.yaml", "FlowSpec output path")
+	outServices := fs.String("out-services", "./services", "ServiceSpec output directory")
+	title := fs.String("title", "Flow generated from trace", "FlowSpec title")
+	noValidate := fs.Bool("no-validate", false, "Skip schema + lint validation gate (not recommended)")
+	_ = fs.Parse(args)
 
 	if *tracePath == "" {
 		exitErr(fmt.Errorf("--trace parameter is required"))
@@ -37,27 +37,12 @@ func runDiscover(args []string) {
 		return tr.Spans[i].StartNanos < tr.Spans[j].StartNanos
 	})
 
-    // 生成 FlowSpec YAML（先不落盘，先生成 ServiceSpec 与校验）
-    yml := generateFlowYAML(tr, *title, *outServices)
+	if err := discoverAndPersist(tr, *title, *out, *outServices, *noValidate); err != nil {
+		exitErr(err)
+	}
+	fmt.Printf("Generated FlowSpec: %s\n", *out)
 
-    // 先生成 ServiceSpec 文件（FlowSpec 校验依赖其存在）
-    if err := spec.GenerateServiceSpecs(tr.Spans, *outServices); err != nil {
-        exitErr(fmt.Errorf("failed to generate ServiceSpec: %w", err))
-    }
-
-    if !*noValidate {
-        if err := validateAndPersistFlow(yml, *out, *outServices); err != nil {
-            exitErr(fmt.Errorf("generation failed schema/lint gate: %w", err))
-        }
-        fmt.Printf("Generated FlowSpec (validated): %s\n", *out)
-    } else {
-        if err := os.WriteFile(*out, []byte(yml), 0644); err != nil {
-            exitErr(fmt.Errorf("failed to write file: %w", err))
-        }
-        fmt.Printf("Generated FlowSpec (no-validate): %s\n", *out)
-    }
-
-    fmt.Println("Dual contract generation complete! Please adjust the generated specifications as needed.")
+	fmt.Println("Dual contract generation complete! Please adjust the generated specifications as needed.")
 }
 
 // generateFlowYAML 从 trace 生成 FlowSpec YAML
@@ -66,7 +51,7 @@ func generateFlowYAML(tr *trace.Trace, title string, outServices string) string 
 
 	// Info 部分
 	sb.WriteString("info:\n")
-	sb.WriteString(fmt.Sprintf("  title: \"%s\"\n\n", title))
+	fmt.Fprintf(&sb, "  title: %q\n\n", title)
 
 	// Services 部分
 	services := make(map[string]struct{})
@@ -77,35 +62,40 @@ func generateFlowYAML(tr *trace.Trace, title string, outServices string) string 
 	}
 
 	sb.WriteString("services:\n")
+	names := make([]string, 0, len(services))
 	for service := range services {
-		sb.WriteString(fmt.Sprintf("  %s:\n", service))
-		sb.WriteString(fmt.Sprintf("    spec: \"%s/%s.servicespec.yaml\"\n", outServices, service))
+		names = append(names, service)
+	}
+	sort.Strings(names)
+	for _, service := range names {
+		fmt.Fprintf(&sb, "  %q:\n", service)
+		fmt.Fprintf(&sb, "    spec: %q\n", filepath.ToSlash(filepath.Join(outServices, spec.ServiceSpecFilename(service))))
 	}
 	sb.WriteString("\n")
 
-    // Flow 部分
-    sb.WriteString("flow:\n")
-    for i, span := range tr.Spans {
-        stepName := fmt.Sprintf("Step%d-%s", i+1, span.Name)
-        if span.Service == "" || span.Name == "" {
-            continue // 跳过无效的 span
-        }
+	// Flow 部分
+	sb.WriteString("flow:\n")
+	for i, span := range tr.Spans {
+		stepName := fmt.Sprintf("Step%d-%s", i+1, span.Name)
+		if span.Service == "" || span.Name == "" {
+			continue // 跳过无效的 span
+		}
 
-        // 使用规范化的 operationId
-        opId := spec.ComputeOperationID(span)
-        sb.WriteString(fmt.Sprintf("  - step: \"%s\"\n", stepName))
-        sb.WriteString(fmt.Sprintf("    call: \"%s.%s\"\n", span.Service, opId))
+		// 使用规范化的 operationId
+		opId := spec.ComputeOperationID(span)
+		fmt.Fprintf(&sb, "  - step: %q\n", stepName)
+		fmt.Fprintf(&sb, "    call: %q\n", span.Service+"."+opId)
 
-        // 不再将遥测属性塞入 FlowSpec.input，保持输入干净。
-        // 如需传入真实调用实参（path/query/headers/body），请由用户后续补充。
+		// 不再将遥测属性塞入 FlowSpec.input，保持输入干净。
+		// 如需传入真实调用实参（path/query/headers/body），请由用户后续补充。
 
 		// Generate output (assuming each step has a response)
-        outputVar := fmt.Sprintf("%sResponse", strings.ToLower(span.Service))
-        sb.WriteString("    output:\n")
-        sb.WriteString(fmt.Sprintf("      %s: \"response.body\"  # TODO: Adjust output mapping\n", outputVar))
+		outputVar := fmt.Sprintf("%sResponse", strings.ToLower(span.Service))
+		sb.WriteString("    output:\n")
+		fmt.Fprintf(&sb, "      %q: \"response.body\"  # TODO: Adjust output mapping\n", outputVar)
 
-        sb.WriteString("\n")
-    }
+		sb.WriteString("\n")
+	}
 
 	// Add explanatory comments
 	sb.WriteString("# This file was auto-generated by flowspec discover\n")

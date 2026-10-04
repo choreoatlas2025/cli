@@ -25,16 +25,16 @@ const (
 )
 
 // WriteReport 生成结构化报告
-func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult) error {
+func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
 	switch fmtType {
 	case ReportJSON:
-		return writeJSONReport(path, steps, gateResult)
+		return writeJSONReport(path, steps, gateResult, inputs...)
 	case ReportJUnit:
-		return writeJUnitReport(path, steps, gateResult)
+		return writeJUnitReport(path, steps, gateResult, inputs...)
 	case ReportHTML:
-		return writeHTMLReport(path, steps, spans, gateResult)
+		return writeHTMLReport(path, steps, spans, gateResult, inputs...)
 	default:
-		return fmt.Errorf("Unsupported report format: %s", fmtType)
+		return fmt.Errorf("unsupported report format: %s", fmtType)
 	}
 }
 
@@ -61,7 +61,7 @@ type CoverageSummary struct {
 }
 
 // writeJSONReport 写入 JSON 格式报告
-func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.GateResult) error {
+func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
 	summary := calculateCoverageSummary(steps)
 
 	// Add baseline comparison fields if available
@@ -87,23 +87,29 @@ func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.
 	}
 
 	report := struct {
+		validate.Outcome
+		ExitCode    int                   `json:"exitCode"`
+		Inputs      *html.InputBinding    `json:"inputs,omitempty"`
 		Timestamp   time.Time             `json:"timestamp"`
 		TotalSteps  int                   `json:"totalSteps"`
 		PassedSteps int                   `json:"passedSteps"`
 		FailedSteps int                   `json:"failedSteps"`
-		Success     bool                  `json:"success"`
 		Steps       []validate.StepResult `json:"steps"`
 		Summary     CoverageSummary       `json:"summary"`
 		GateResult  *html.GateResult      `json:"gateResult,omitempty"`
 	}{
+		Outcome:     reportOutcome(steps, gateResult),
+		ExitCode:    outcomeExitCode(reportOutcome(steps, gateResult)),
 		Timestamp:   time.Now(),
 		TotalSteps:  len(steps),
 		PassedSteps: 0,
 		FailedSteps: 0,
-		Success:     true,
 		Steps:       steps,
 		Summary:     summary,
 		GateResult:  gateResult,
+	}
+	if len(inputs) > 0 {
+		report.Inputs = inputs[0]
 	}
 
 	for _, s := range steps {
@@ -111,20 +117,19 @@ func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.
 			report.PassedSteps++
 		} else {
 			report.FailedSteps++
-			report.Success = false
 		}
 	}
 
 	b, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return fmt.Errorf("Failed to serialize JSON report: %w", err)
+		return fmt.Errorf("failed to serialize JSON report: %w", err)
 	}
 
 	return os.WriteFile(path, b, 0644)
 }
 
 // writeJUnitReport 写入 JUnit XML 格式报告
-func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html.GateResult) error {
+func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
 	var sb strings.Builder
 	fails := 0
 	for _, s := range steps {
@@ -132,74 +137,91 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 			fails++
 		}
 	}
+	gateFailed := gateResult != nil && gateResult.Checked && !gateResult.Passed
+	tests := len(steps)
+	if gateFailed {
+		fails++
+		tests++
+	}
 
 	summary := calculateCoverageSummary(steps)
 
 	// JUnit XML header
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`<testsuite name="flowspec-validation" tests="%d" failures="%d" time="0">`, len(steps), fails))
+	fmt.Fprintf(&sb, `<testsuite name="flowspec-validation" tests="%d" failures="%d" time="0">`, tests, fails)
 	sb.WriteString("\n")
 
 	// 添加覆盖度总结到 properties
 	sb.WriteString("  <properties>\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.stepsTotal" value="%d"/>`, summary.StepsTotal))
+	if len(inputs) > 0 && inputs[0] != nil {
+		binding, err := json.Marshal(inputs[0])
+		if err != nil {
+			return fmt.Errorf("failed to serialize report inputs: %w", err)
+		}
+		fmt.Fprintf(&sb, "    <property name=\"result.inputs\" value=\"%s\"/>\n", xmlEscape(string(binding)))
+	}
+	fmt.Fprintf(&sb, "    <property name=\"result.exitCode\" value=\"%d\"/>\n", outcomeExitCode(reportOutcome(steps, gateResult)))
+	fmt.Fprintf(&sb, `    <property name="coverage.stepsTotal" value="%d"/>`, summary.StepsTotal)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.stepsPass" value="%d"/>`, summary.StepsPass))
+	fmt.Fprintf(&sb, `    <property name="coverage.stepsPass" value="%d"/>`, summary.StepsPass)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.stepsFail" value="%d"/>`, summary.StepsFail))
+	fmt.Fprintf(&sb, `    <property name="coverage.stepsFail" value="%d"/>`, summary.StepsFail)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.stepsSkip" value="%d"/>`, summary.StepsSkip))
+	fmt.Fprintf(&sb, `    <property name="coverage.stepsSkip" value="%d"/>`, summary.StepsSkip)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.conditionsTotal" value="%d"/>`, summary.ConditionsTotal))
+	fmt.Fprintf(&sb, `    <property name="coverage.conditionsTotal" value="%d"/>`, summary.ConditionsTotal)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.conditionsPass" value="%d"/>`, summary.ConditionsPass))
+	fmt.Fprintf(&sb, `    <property name="coverage.conditionsPass" value="%d"/>`, summary.ConditionsPass)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.conditionsFail" value="%d"/>`, summary.ConditionsFail))
+	fmt.Fprintf(&sb, `    <property name="coverage.conditionsFail" value="%d"/>`, summary.ConditionsFail)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.conditionsSkip" value="%d"/>`, summary.ConditionsSkip))
+	fmt.Fprintf(&sb, `    <property name="coverage.conditionsSkip" value="%d"/>`, summary.ConditionsSkip)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(`    <property name="coverage.coverageRate" value="%.2f"/>`, summary.CoverageRate))
+	fmt.Fprintf(&sb, `    <property name="coverage.coverageRate" value="%.2f"/>`, summary.CoverageRate)
 	sb.WriteString("\n")
 
 	// Add baseline comparison properties if available
 	if gateResult != nil && gateResult.Details != nil {
 		if val, ok := gateResult.Details["baselineStepsCoverage"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsCoverage" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.stepsCoverage" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 		if val, ok := gateResult.Details["stepsDeltaAbs"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsDeltaAbs" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.stepsDeltaAbs" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 		if val, ok := gateResult.Details["stepsDeltaPct"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.stepsDeltaPct" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.stepsDeltaPct" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 		if val, ok := gateResult.Details["baselineConditionsRate"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsRate" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.conditionsRate" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 		if val, ok := gateResult.Details["conditionsDeltaAbs"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsDeltaAbs" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.conditionsDeltaAbs" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 		if val, ok := gateResult.Details["conditionsDeltaPct"].(float64); ok {
-			sb.WriteString(fmt.Sprintf(`    <property name="baseline.conditionsDeltaPct" value="%.2f"/>`, val))
+			fmt.Fprintf(&sb, `    <property name="baseline.conditionsDeltaPct" value="%.2f"/>`, val)
 			sb.WriteString("\n")
 		}
 	}
 
 	sb.WriteString("  </properties>\n")
 
+	if gateFailed {
+		sb.WriteString("  <testcase name=\"threshold-policy\" classname=\"flowspec\"><failure type=\"GateFailure\" message=\"threshold policy failed\"/></testcase>\n")
+	}
 	// Test cases
 	for _, s := range steps {
-		sb.WriteString(fmt.Sprintf(`  <testcase name="%s" classname="%s">`, xmlEscape(s.Step), xmlEscape(s.Call)))
+		fmt.Fprintf(&sb, `  <testcase name="%s" classname="%s">`, xmlEscape(s.Step), xmlEscape(s.Call))
 
 		if s.Status == "FAIL" {
 			sb.WriteString("\n")
-			sb.WriteString(fmt.Sprintf(`    <failure message="%s" type="ValidationFailure">%s</failure>`,
-				xmlEscape(s.Message), xmlEscape(s.Message)))
+			fmt.Fprintf(&sb, `    <failure message="%s" type="ValidationFailure">%s</failure>`,
+				xmlEscape(s.Message), xmlEscape(s.Message))
 			sb.WriteString("\n  ")
 		}
 
@@ -207,7 +229,7 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 		if len(s.Conditions) > 0 {
 			sb.WriteString("\n")
 			conditionsJSON, _ := json.Marshal(s.Conditions)
-			sb.WriteString(fmt.Sprintf(`    <system-out><![CDATA[%s]]></system-out>`, conditionsJSON))
+			fmt.Fprintf(&sb, `    <system-out><![CDATA[%s]]></system-out>`, conditionsJSON)
 			sb.WriteString("\n  ")
 		}
 
@@ -230,7 +252,7 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 }
 
 // writeHTMLReport 写入 HTML 格式报告
-func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult) error {
+func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
 	// Convert trace spans to HTML span info
 	var spanInfos []html.SpanInfo
 	for _, span := range spans {
@@ -244,6 +266,10 @@ func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Spa
 
 	// Build HTML data with gate result and CE edition
 	data := html.BuildHTMLData(steps, spanInfos, gateResult)
+	data.ExitCode = outcomeExitCode(reportOutcome(steps, gateResult))
+	if len(inputs) > 0 {
+		data.Inputs = inputs[0]
+	}
 
 	// Write HTML report
 	return html.WriteHTMLReport(path, data)

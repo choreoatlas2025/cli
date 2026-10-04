@@ -1,85 +1,125 @@
 // SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
 // SPDX-License-Identifier: Apache-2.0
+
 package cli
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 
-    "github.com/choreoatlas2025/cli/internal/schemas"
-    "github.com/choreoatlas2025/cli/internal/spec"
-    "github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/schemas"
+	"github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/validate"
+	"gopkg.in/yaml.v3"
 )
 
-// validateAndPersistFlow validates generated FlowSpec YAML (and referenced ServiceSpecs)
-// using embedded JSON Schemas and static lint. On success, writes the YAML to outPath.
-func validateAndPersistFlow(flowYAML string, outPath string, outServices string) error {
-    // Write FlowSpec to a temp file in the same directory as outPath for relative path resolution
-    outDir := filepath.Dir(outPath)
-    if err := os.MkdirAll(outDir, 0o755); err != nil {
-        return fmt.Errorf("failed to ensure output directory: %w", err)
-    }
-    tmp, err := os.CreateTemp(outDir, ".flowspec.*.yaml")
-    if err != nil {
-        return fmt.Errorf("failed to create temp file: %w", err)
-    }
-    tmpPath := tmp.Name()
-    if _, err := tmp.WriteString(flowYAML); err != nil {
-        tmp.Close()
-        os.Remove(tmpPath)
-        return fmt.Errorf("failed to write temp flowspec: %w", err)
-    }
-    tmp.Close()
-
-    // Schema validate FlowSpec
-    if err := spec.ValidateYAMLWithSchemaFS(tmpPath, schemas.FS, "flowspec.schema.json"); err != nil {
-        os.Remove(tmpPath)
-        return fmt.Errorf("FlowSpec structure validation failed: %w", err)
-    }
-
-    // Load flowspec to get service bindings and build op index
-    flow, err := spec.LoadFlowSpec(tmpPath)
-    if err != nil {
-        os.Remove(tmpPath)
-        return err
-    }
-
-    // Validate each referenced ServiceSpec file using embedded schema
-    for alias, bind := range flow.Services {
-        serviceSpecPath := spec.ResolvePath(tmpPath, bind.Spec)
-        if err := spec.ValidateYAMLWithSchemaFS(serviceSpecPath, schemas.FS, "servicespec.schema.json"); err != nil {
-            os.Remove(tmpPath)
-            return fmt.Errorf("ServiceSpec structure validation failed (%s): %w", alias, err)
-        }
-    }
-
-    // Build operation index (loads ServiceSpec logical content)
-    _, opIndex, err := flow.BuildOperationIndex(tmpPath)
-    if err != nil {
-        os.Remove(tmpPath)
-        return err
-    }
-
-    // Static lint gate (call format, references, variables)
-    issues, err := validate.LintFlow(tmpPath, flow, opIndex)
-    if err != nil {
-        os.Remove(tmpPath)
-        return err
-    }
-    for _, is := range issues {
-        if is.Level == "ERROR" {
-            os.Remove(tmpPath)
-            return fmt.Errorf("lint error: %s", is.Msg)
-        }
-    }
-
-    // All validations passed; persist to outPath
-    if err := os.WriteFile(outPath, []byte(flowYAML), 0o644); err != nil {
-        os.Remove(tmpPath)
-        return fmt.Errorf("failed to write flowspec: %w", err)
-    }
-    os.Remove(tmpPath)
-    return nil
+func validateGeneratedFlow(path string) error {
+	if err := spec.ValidateYAMLWithSchemaFS(path, schemas.FS, "flowspec.schema.json"); err != nil {
+		return fmt.Errorf("invalid generated FlowSpec: %w", err)
+	}
+	flow, err := spec.LoadFlowSpec(path)
+	if err != nil {
+		return err
+	}
+	for alias, bind := range flow.Services {
+		if err := spec.ValidateYAMLWithSchemaFS(spec.ResolvePath(path, bind.Spec), schemas.FS, "servicespec.schema.json"); err != nil {
+			return fmt.Errorf("invalid generated ServiceSpec %s: %w", alias, err)
+		}
+	}
+	_, operations, err := flow.BuildOperationIndex(path)
+	if err != nil {
+		return err
+	}
+	issues, err := validate.LintFlow(path, flow, operations)
+	if err != nil {
+		return err
+	}
+	for _, issue := range issues {
+		if issue.Level == "ERROR" {
+			return fmt.Errorf("invalid generated contract: %s", issue.Msg)
+		}
+	}
+	return nil
 }
 
+// validateAndPersistFlow retains the single-file helper used by discovery tests.
+func validateAndPersistFlow(flowYAML, outPath, _ string) error {
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
+	staged, err := stageGeneratedFile(outPath, []byte(flowYAML), 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(staged) }()
+	if err := validateGeneratedFlow(staged); err != nil {
+		return err
+	}
+	return commitGeneratedFiles([]generatedFile{{path: outPath, data: []byte(flowYAML)}}, os.Rename)
+}
+
+func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noValidate bool) error {
+	flowPath, err := filepath.Abs(outPath)
+	if err != nil {
+		return err
+	}
+	servicesDir, err := filepath.Abs(outServices)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(flowPath), 0o755); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(flowPath), ".choreoatlas-discover-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	files, err := spec.BuildServiceSpecFiles(tr.Spans)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(files))
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(staging, name), data, 0o644); err != nil {
+			return err
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	// Both staged and final contracts refer to files relative to their own paths.
+	if !noValidate {
+		stagedFlow := filepath.Join(staging, "flow.yaml")
+		if err := os.WriteFile(stagedFlow, []byte(generateFlowYAML(tr, title, staging)), 0o644); err != nil {
+			return err
+		}
+		if err := validateGeneratedFlow(stagedFlow); err != nil {
+			return err
+		}
+	}
+	bindingDir, err := filepath.Rel(filepath.Dir(flowPath), servicesDir)
+	if err != nil {
+		return err
+	}
+	flowYAML := generateFlowYAML(tr, title, bindingDir)
+	// Final output must remain parseable even when schema/lint checks are skipped.
+	var flow spec.FlowSpec
+	if err := yaml.Unmarshal([]byte(flowYAML), &flow); err != nil {
+		return err
+	}
+	var updates []generatedFile
+	for _, name := range names {
+		updates = append(updates, generatedFile{path: filepath.Join(servicesDir, name), data: files[name]})
+	}
+	updates = append(updates, generatedFile{path: flowPath, data: []byte(flowYAML)})
+	if err := commitGeneratedFiles(updates, os.Rename); err != nil {
+		return err
+	}
+	for _, name := range names {
+		fmt.Printf("Generated ServiceSpec: %s\n", filepath.Join(outServices, name))
+	}
+	return nil
+}

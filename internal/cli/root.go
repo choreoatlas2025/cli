@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -122,13 +123,36 @@ var (
 )
 
 func runVersion(args []string) {
-	// Display version with -ce suffix
-	fmt.Printf("choreoatlas v%s-ce\n", Version)
+	fmt.Printf("choreoatlas %s\n", formatCEVersion(Version))
 	fmt.Printf("Edition: Community Edition (CE)\n")
 	fmt.Printf("Git Commit: %s\n", GitCommit)
 	fmt.Printf("Build Time: %s\n", BuildTime)
 	fmt.Printf("Go Version: %s\n", runtime.Version())
 	fmt.Printf("Platform: %s\n", fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH))
+}
+
+// formatCEVersion preserves release tags and git-describe metadata while adding
+// the version prefix and CE identifier only when missing.
+func formatCEVersion(version string) string {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if version == "" {
+		version = "dev"
+	}
+	base, metadata, hasMetadata := strings.Cut(version, "+")
+	hasCE := false
+	for _, suffix := range strings.Split(base, "-")[1:] {
+		if suffix == "ce" || strings.HasPrefix(suffix, "ce.") {
+			hasCE = true
+			break
+		}
+	}
+	if !hasCE {
+		base += "-ce"
+	}
+	if hasMetadata {
+		base += "+" + metadata
+	}
+	return "v" + base
 }
 
 func exitErr(err error) {
@@ -227,14 +251,34 @@ func runConvert(args []string) {
 	if *to != "flow" {
 		exitErr(fmt.Errorf("only --to flow is supported currently"))
 	}
-	fspec, err := spec.LoadFlowSpec(*in)
+	fspec, _, err := loadAndValidateFlow(*in)
 	if err != nil {
 		exitErr(err)
 	}
 	if !fspec.IsGraphMode() {
 		exitErr(fmt.Errorf("input is not in graph(DAG) format"))
 	}
-	conv := spec.ConvertGraphToFlow(fspec)
+	conv, err := spec.ConvertGraphToFlow(fspec)
+	if err != nil {
+		exitErr(err)
+	}
+	inputPath, err := filepath.Abs(*in)
+	if err != nil {
+		exitErr(err)
+	}
+	outputPath, err := filepath.Abs(*out)
+	if err != nil {
+		exitErr(err)
+	}
+	for alias, binding := range conv.Services {
+		if !filepath.IsAbs(binding.Spec) {
+			binding.Spec, err = filepath.Rel(filepath.Dir(outputPath), spec.ResolvePath(inputPath, binding.Spec))
+			if err != nil {
+				exitErr(err)
+			}
+			conv.Services[alias] = binding
+		}
+	}
 	if err := spec.WriteFlowSpec(*out, conv); err != nil {
 		exitErr(err)
 	}

@@ -44,7 +44,13 @@ LDFLAGS="-X github.com/choreoatlas2025/cli/internal/cli.Version=v0.8.0-ce \
         -X github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce"
 ```
 
-The `choreoatlas version` command always shows the `-ce` suffix so operators can confirm edition provenance.
+The `choreoatlas version` command displays one leading `v` and preserves an
+existing `-ce` identifier, including release candidates such as
+`v0.8.1-ce.rc.1`. Versions without the CE identifier receive `-ce` before any
+`+build` metadata. Git-describe distance and dirty markers are preserved.
+
+For example, both `0.8.0` and `v0.8.0-ce` display as `v0.8.0-ce`, while
+`v0.8.0-ce-3-gabcdef-dirty` keeps its development metadata unchanged.
 
 ## Release Checklist
 

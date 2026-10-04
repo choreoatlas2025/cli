@@ -13,7 +13,7 @@ Automatically detects circular dependencies in your service call graph to preven
 Validates three types of relationships with configurable time tolerance:
 
 - **Parent-Child Relationships**: Ensures child spans execute within their parent's time bounds
-- **Temporal Relationships**: Validates that predecessor operations complete before successors start
+- **Temporal Dependencies**: Validates that each declared predecessor starts no later than its successor
 - **Concurrent Relationships**: Verifies that concurrent operations actually overlap in time
 
 ### 3. Topological Sorting
@@ -24,9 +24,9 @@ Generates a valid execution order for all operations respecting dependencies.
 ### Causality Mode
 Control the level of causality checking with the `--causality` flag:
 
-- `strict`: Use parent-child span relationships from OTLP data
+- `strict`: Require declared dependencies to match direct parent-child attributes in native trace JSON
 - `temporal`: Use temporal ordering based on timestamps (default)
-- `off`: Disable causality checking
+- `off`: Disable dependency and metadata timing checks; unique span consumption, semantic checks, and explicit parallel overlap checks remain enabled
 
 ### Time Tolerance
 Configure time tolerance for edge constraints with `--causality-tolerance` (in milliseconds):
@@ -49,11 +49,17 @@ For spans with parent-child relationships:
 
 ### Temporal Constraints
 For sequential operations (A → B):
-- A.endTime must be ≤ B.startTime + tolerance
+- A.startTime must be ≤ B.startTime; overlapping parent and child calls are permitted
+
+Every call consumes a distinct span. Matching and semantic evaluation use the
+same span and step input, including repeated operations and calls attached to
+parallel containers. Adding parent attributes does not select a weaker matching
+algorithm. Duplicate span identities are rejected.
 
 ### Concurrency Constraints
 For parallel operations marked as concurrent:
 - Time ranges must overlap: A.startTime < B.endTime AND B.startTime < A.endTime
+- Sharing a parent alone does not prove concurrency
 
 ## Example Violations
 

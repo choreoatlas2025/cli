@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -63,6 +64,10 @@ func runBaselineRecord(args []string) {
 	// Record baseline
 	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath)
 	if err != nil {
+		if errors.Is(err, baseline.ErrIncompleteValidation) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(exitcode.ValidationFailed)
+		}
 		exitErr(fmt.Errorf("failed to record baseline: %w", err))
 	}
 
@@ -88,6 +93,15 @@ func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string
 	_, opIndex, err := flow.BuildOperationIndex(flowPath)
 	if err != nil {
 		return nil, nil, err
+	}
+	issues, err := validate.LintFlow(flowPath, flow, opIndex)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, issue := range issues {
+		if issue.Level == "ERROR" {
+			return nil, nil, fmt.Errorf("invalid contract: %s", issue.Msg)
+		}
 	}
 
 	return flow, opIndex, nil

@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"strings"
@@ -11,45 +10,66 @@ import (
 )
 
 func TestVersionOutput(t *testing.T) {
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	originalVersion := Version
+	t.Cleanup(func() { Version = originalVersion })
 
-	// Run version command
-	runVersion([]string{})
-
-	// Restore stdout
-	w.Close()
-	os.Stdout = old
-
-	// Read output
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-
-	// Test for CE suffix in version line
-	if !strings.Contains(output, "-ce") {
-		t.Errorf("Version output missing -ce suffix: %s", output)
+	cases := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{"plain", "0.8.0", "v0.8.0-ce"},
+		{"prefixed", "v0.8.0", "v0.8.0-ce"},
+		{"release tag", "v0.8.0-ce", "v0.8.0-ce"},
+		{"release version", "0.8.0-ce", "v0.8.0-ce"},
+		{"release candidate tag", "v0.8.1-ce.rc.1", "v0.8.1-ce.rc.1"},
+		{"release candidate version", "0.8.1-ce.rc.1", "v0.8.1-ce.rc.1"},
+		{"development", "0.8.0-dev", "v0.8.0-dev-ce"},
+		{"git describe", "v0.8.0-ce-3-gabcdef-dirty", "v0.8.0-ce-3-gabcdef-dirty"},
+		{"build metadata", "v0.8.0+build.1", "v0.8.0-ce+build.1"},
+		{"tag with build metadata", "v0.8.0-ce+build.1", "v0.8.0-ce+build.1"},
+		{"similar prerelease name", "0.8.0-ceiling", "v0.8.0-ceiling-ce"},
+		{"empty", "", "vdev-ce"},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			Version = tc.version
+			originalStdout := os.Stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = r.Close() }()
+			t.Cleanup(func() { os.Stdout = originalStdout })
+			os.Stdout = w
+			runVersion(nil)
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			os.Stdout = originalStdout
 
-	// Test for Community Edition text
-	if !strings.Contains(output, "Community Edition (CE)") {
-		t.Errorf("Version output missing 'Community Edition (CE)' text: %s", output)
-	}
-
-	// Test for other required fields
-	requiredFields := []string{
-		"Git Commit:",
-		"Build Time:",
-		"Go Version:",
-		"Platform:",
-	}
-
-	for _, field := range requiredFields {
-		if !strings.Contains(output, field) {
-			t.Errorf("Version output missing required field '%s': %s", field, output)
-		}
+			output, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(output)
+			firstLine := strings.SplitN(text, "\n", 2)[0]
+			if want := "choreoatlas " + tc.want; firstLine != want {
+				t.Errorf("version line = %q, want %q", firstLine, want)
+			}
+			requiredFields := []string{
+				"Edition: Community Edition (CE)",
+				"Git Commit:",
+				"Build Time:",
+				"Go Version:",
+				"Platform:",
+			}
+			for _, field := range requiredFields {
+				if !strings.Contains(text, field) {
+					t.Errorf("version output missing %q: %s", field, text)
+				}
+			}
+		})
 	}
 }
 

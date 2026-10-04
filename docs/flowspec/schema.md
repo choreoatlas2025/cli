@@ -122,6 +122,21 @@ See [VSCode Setup Guide](../schemas/vscode-setup.md) for auto-completion and val
 
 ## Migration Guide
 
+### DAG to Flow conversion
+
+```bash
+choreoatlas spec convert --in graph.yaml --out flow.yaml
+```
+
+Conversion supports an unconditional single chain. It preserves every call and
+its input, output, metadata, and order, and adjusts relative ServiceSpec paths for
+the output location. Cycles, conditional edges, branches, joins, and independent
+roots are rejected without writing the output. Keep these contracts in DAG form
+and validate them directly: independent DAG branches do not require the time
+overlap required by a Flow `parallel` group.
+
+### Flow to DAG migration
+
 To migrate from flow to graph format:
 
 1. Convert sequential steps to nodes with unique IDs

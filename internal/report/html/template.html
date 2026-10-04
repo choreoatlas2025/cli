@@ -205,6 +205,7 @@
     <div class="edition-badge ce" id="edition-badge">CE</div>
   </div>
   
+  <div id="overall-status"></div>
   <div id="gate-status"></div>
   
   <div class="summary" id="summary"></div>
@@ -247,6 +248,9 @@ const formatDuration = (nanos) => {
 function renderSummary(data) {
   const summary = data.summary || {};
   const gateResult = data.gateResult || {};
+  const overall = document.getElementById('overall-status');
+  overall.className = 'gate-alert ' + (data.success ? 'gate-pass' : 'gate-fail');
+  overall.textContent = data.success ? '✓ Validation: PASSED' : '✗ Validation: FAILED';
   
   // Gate status
   const gateDiv = document.getElementById('gate-status');

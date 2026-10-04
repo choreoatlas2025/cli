@@ -1,69 +1,58 @@
 # Baseline and Report Documentation
 
-## Overview
+## Final result
 
-The ChoreoAtlas CLI supports baseline comparison for tracking performance and validation quality over time. When a baseline is provided, the system switches from absolute threshold checking to relative comparison mode.
+Runtime validation and threshold policy have separate results. A failed step or
+evaluated CEL condition fails runtime validation with exit code `3`. Thresholds
+cannot override that failure. When runtime validation passes but the policy fails,
+the command exits `4`. Only both passing permits exit `0`.
 
-## Baseline Comparison Modes
+JSON and HTML expose the same final `success`, `status`, and `exitCode`, together
+with `validationPassed` and `gatePassed`. JUnit represents a failed policy as a
+failing test case, even when all runtime steps passed. Its `result.exitCode`
+property records the command decision. Coverage statistics remain diagnostics.
 
-### Absolute Mode (No Baseline)
-When no baseline is provided, thresholds are checked against absolute values:
-- Step coverage must meet the specified `--threshold-steps` (default 90%)
-- Condition pass rate must meet the specified `--threshold-conds` (default 95%)
+## Threshold policy
 
-### Relative Mode (With Baseline)
-When a baseline is provided via `--baseline`, the system compares current metrics against the baseline:
-- Calculates delta percentages for both step coverage and condition pass rates
-- Thresholds now represent maximum allowed degradation
-- Example: `--threshold-steps 0.1` allows up to 10% degradation from baseline
+Absolute floors apply with or without a baseline:
 
-## Report Fields
+- `--threshold-steps`: minimum step coverage, default `0.9`.
+- `--threshold-conds`: minimum condition pass rate, default `0.95`.
 
-### Standard Fields
-- `stepsTotal`: Total number of steps in the flow
-- `stepsPass`: Number of steps that passed validation
-- `stepsCoverage`: Percentage of steps covered (0.0-1.0)
-- `conditionsTotal`: Total number of conditions evaluated
-- `conditionsPass`: Number of conditions that passed
-- `conditionsRate`: Pass rate for conditions (0.0-1.0)
+With a baseline, additional limits apply:
 
-### Baseline Fields (when baseline is provided)
-- `baselineStepsCoverage`: Step coverage from baseline
-- `stepsDeltaAbs`: Absolute difference in step coverage
-- `stepsDeltaPct`: Percentage change from baseline
-- `baselineConditionsRate`: Condition pass rate from baseline
-- `conditionsDeltaAbs`: Absolute difference in condition rate
-- `conditionsDeltaPct`: Percentage change from baseline
+- `--max-steps-degradation`: maximum relative coverage degradation, default `0`.
+- `--max-conds-degradation`: maximum relative condition rate degradation, default `0`.
 
-## Example Output
+Relative degradation is `(baselineRate - currentRate) / baselineRate` for a
+positive baseline rate. The additional limits never replace absolute floors.
+All four values must be finite numbers between `0` and `1`. A step-level failure
+still fails runtime validation regardless of these settings.
 
-### Without Baseline
-```
-[GATE] Baseline Gate: PASSED ✓
-  Steps Coverage: 95.0% (>= 90.0%)
-  Conditions Pass Rate: 98.0% (>= 95.0%)
+```bash
+choreoatlas validate \
+  --flow order-flow.flowspec.yaml \
+  --trace traces/current.json \
+  --baseline baseline.json \
+  --threshold-steps 0.9 \
+  --threshold-conds 0.95 \
+  --max-steps-degradation 0.05 \
+  --max-conds-degradation 0.03
 ```
 
-### With Baseline
-```
-[GATE] Baseline Gate: PASSED ✓
-  Steps Coverage: 93.0% (>= 90.0%)
-  Conditions Pass Rate: 96.0% (>= 95.0%)
-  Baseline Comparison:
-    Steps: 95.0% baseline → 93.0% current (delta: -2.1%)
-    Conditions: 98.0% baseline → 96.0% current (delta: -2.0%)
-```
+## Baseline identity
 
-## Baseline Missing Strategy
+`baseline record` accepts complete successful results only. Failed, missing,
+duplicate, or skipped condition results cannot be recorded as a successful
+baseline. Actual calls are counted, including parallel children; containers
+without a call do not inflate the count.
 
-The `--baseline-missing` flag controls behavior when the specified baseline file cannot be loaded:
+Format `2` records the FlowSpec title and SHA-256, every referenced ServiceSpec's
+SHA-256, covered step identities, and evaluated condition identities. Loading and
+comparison validate this data against the current contract. Changes to any bound
+contract file, including formatting changes, require recording a new baseline.
+Format `1` lacks complete service identity and must be replaced by a new recording.
 
-- `fail` (default): Exit with an error if the baseline file cannot be loaded
-- `treat-as-absolute`: Fall back to absolute threshold mode with a warning
-
-## Usage Examples
-
-### Record a Baseline
 ```bash
 choreoatlas baseline record \
   --flow order-flow.flowspec.yaml \
@@ -71,21 +60,18 @@ choreoatlas baseline record \
   --out baseline.json
 ```
 
-### Validate with Baseline Comparison
-```bash
-choreoatlas validate \
-  --flow order-flow.flowspec.yaml \
-  --trace traces/current.json \
-  --baseline baseline.json \
-  --threshold-steps 0.05 \
-  --threshold-conds 0.03
-```
+`--baseline-missing fail` is the default. `treat-as-absolute` falls back only when
+the file does not exist; corrupt, unsupported, or incompatible baselines fail.
 
-### Handle Missing Baseline
-```bash
-choreoatlas validate \
-  --flow order-flow.flowspec.yaml \
-  --trace traces/current.json \
-  --baseline baseline.json \
-  --baseline-missing treat-as-absolute
-```
+## Report input binding
+
+Reports include the hashes of the FlowSpec, referenced ServiceSpecs, trace,
+consumed baseline, and validator binary, plus validator version, semantic and
+causality settings, and threshold policy. JSON and HTML use `inputs`; JUnit uses
+the JSON-valued `result.inputs` property. These bindings identify which inputs and
+rules produced a result; reports do not re-evaluate themselves after files change.
+
+Baseline comparison details include `baselineStepsCoverage`, `stepsDeltaAbs`,
+`stepsDeltaPct`, `baselineConditionsRate`, `conditionsDeltaAbs`, and
+`conditionsDeltaPct`. Rate values are fractions between `0` and `1`; relative
+changes can exceed that interval when a rate improves from a small baseline.
