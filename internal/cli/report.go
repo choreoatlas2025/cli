@@ -113,7 +113,7 @@ func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.
 	}
 
 	for _, s := range steps {
-		if s.Status == "PASS" {
+		if validate.StepPassed(s) {
 			report.PassedSteps++
 		} else {
 			report.FailedSteps++
@@ -133,12 +133,16 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 	var sb strings.Builder
 	fails := 0
 	for _, s := range steps {
-		if s.Status == "FAIL" {
+		if !validate.StepPassed(s) {
 			fails++
 		}
 	}
 	gateFailed := gateResult != nil && gateResult.Checked && !gateResult.Passed
 	tests := len(steps)
+	if len(steps) == 0 {
+		fails++
+		tests++
+	}
 	if gateFailed {
 		fails++
 		tests++
@@ -214,11 +218,14 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 	if gateFailed {
 		sb.WriteString("  <testcase name=\"threshold-policy\" classname=\"flowspec\"><failure type=\"GateFailure\" message=\"threshold policy failed\"/></testcase>\n")
 	}
+	if len(steps) == 0 {
+		sb.WriteString("  <testcase name=\"validation-result\" classname=\"flowspec\"><failure type=\"ValidationFailure\" message=\"no evaluated steps\"/></testcase>\n")
+	}
 	// Test cases
 	for _, s := range steps {
 		fmt.Fprintf(&sb, `  <testcase name="%s" classname="%s">`, xmlEscape(s.Step), xmlEscape(s.Call))
 
-		if s.Status == "FAIL" {
+		if !validate.StepPassed(s) {
 			sb.WriteString("\n")
 			fmt.Fprintf(&sb, `    <failure message="%s" type="ValidationFailure">%s</failure>`,
 				xmlEscape(s.Message), xmlEscape(s.Message))

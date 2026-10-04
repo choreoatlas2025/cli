@@ -19,6 +19,10 @@ The schema uses `oneOf` to enforce mutual exclusivity between graph and flow for
 - Graph format is recommended for new projects
 - Flow format is maintained for backward compatibility
 
+Graph-to-Flow conversion validates the source schema, then validates the complete
+converted FlowSpec and referenced ServiceSpecs before replacing the destination.
+Schema or lint failure leaves an existing destination unchanged.
+
 ## Graph Format (Recommended)
 
 ### Structure

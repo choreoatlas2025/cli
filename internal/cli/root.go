@@ -13,6 +13,7 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/spec"
+	"gopkg.in/yaml.v3"
 )
 
 // Execute runs the CLI command
@@ -279,7 +280,11 @@ func runConvert(args []string) {
 			conv.Services[alias] = binding
 		}
 	}
-	if err := spec.WriteFlowSpec(*out, conv); err != nil {
+	data, err := yaml.Marshal(conv)
+	if err != nil {
+		exitErr(fmt.Errorf("failed to marshal converted FlowSpec: %w", err))
+	}
+	if err := validateAndPersistFlow(string(data), *out, filepath.Dir(*out)); err != nil {
 		exitErr(err)
 	}
 	fmt.Printf("Converted graph -> flow: %s\n", *out)

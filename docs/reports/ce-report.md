@@ -12,6 +12,10 @@ with `validationPassed` and `gatePassed`. JUnit represents a failed policy as a
 failing test case, even when all runtime steps passed. Its `result.exitCode`
 property records the command decision. Coverage statistics remain diagnostics.
 
+CEL compilation, non-boolean results and runtime errors are condition failures,
+with the error phase retained in the report. Unevaluated conditions cannot count
+as a successful runtime result, regardless of `--skip-as-fail` or threshold values.
+
 ## Threshold policy
 
 Absolute floors apply with or without a baseline:
@@ -47,11 +51,16 @@ duplicate, or skipped condition results cannot be recorded as a successful
 baseline. Actual calls are counted, including parallel children; containers
 without a call do not inflate the count.
 
-Format `2` records the FlowSpec title and SHA-256, every referenced ServiceSpec's
-SHA-256, covered step identities, and evaluated condition identities. Loading and
+Format `3` records the FlowSpec title and SHA-256, every referenced ServiceSpec's
+SHA-256, covered step identities, evaluated condition identities, and recording
+`provenance`: validator version, commit and binary hash, semantic/causality
+configuration, source trace hash and trace identity. Loading and
 comparison validate this data against the current contract. Changes to any bound
-contract file, including formatting changes, require recording a new baseline.
-Format `1` lacks complete service identity and must be replaced by a new recording.
+contract file, including formatting changes, validator or validation configuration
+require recording a new baseline. Formats `1` and `2` lack complete recording
+identity and must be replaced. A new comparison trace is allowed; the recording
+trace hash describes the source of the baseline, rather than requiring reuse of
+the same trace. Recording validates the resulting baseline before writing it.
 
 ```bash
 choreoatlas baseline record \
@@ -70,6 +79,12 @@ consumed baseline, and validator binary, plus validator version, semantic and
 causality settings, and threshold policy. JSON and HTML use `inputs`; JUnit uses
 the JSON-valued `result.inputs` property. These bindings identify which inputs and
 rules produced a result; reports do not re-evaluate themselves after files change.
+
+`traceIdentity.binding` is `trace-id` when every span carries the same trace ID,
+`file-only` for legacy unlabelled inputs, and `invalid` in reports of rejected
+mixed or malformed identity inputs. Reports also expose the consumed baseline's
+recording context as `baselineProvenance`. No trace ID can be inferred from a
+file hash. These attributes remain part of native JSON; they do not add OTLP input.
 
 Baseline comparison details include `baselineStepsCoverage`, `stepsDeltaAbs`,
 `stepsDeltaPct`, `baselineConditionsRate`, `conditionsDeltaAbs`, and

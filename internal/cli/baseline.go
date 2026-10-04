@@ -11,6 +11,7 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
+	"github.com/choreoatlas2025/cli/internal/schemas"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -36,7 +37,14 @@ func runBaselineRecord(args []string) {
 	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
 	tracePath := fs.String("trace", "", "trace.json path")
 	outputPath := fs.String("out", "baseline.json", "baseline output file path")
+	semantic := fs.Bool("semantic", true, "Enable semantic validation (CEL)")
+	causality := fs.String("causality", "temporal", "Causality mode: strict|temporal|off")
+	tolerance := fs.Int64("causality-tolerance", 50, "Causality tolerance in milliseconds")
 	_ = fs.Parse(args)
+	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causality, ToleranceMs: *tolerance}
+	if err := configureValidation(config); err != nil {
+		exitErr(err)
+	}
 
 	if *tracePath == "" {
 		exitErr(fmt.Errorf("--trace parameter is required"))
@@ -62,7 +70,11 @@ func runBaselineRecord(args []string) {
 	}
 
 	// Record baseline
-	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath)
+	provenance, err := executionIdentity(tr, *tracePath, config)
+	if err != nil {
+		exitErr(err)
+	}
+	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath, provenance)
 	if err != nil {
 		if errors.Is(err, baseline.ErrIncompleteValidation) {
 			fmt.Fprintln(os.Stderr, err)
@@ -85,6 +97,9 @@ func runBaselineRecord(args []string) {
 
 // loadAndValidateFlow loads flow spec and validates it
 func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, error) {
+	if err := spec.ValidateYAMLWithSchemaFS(flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
+		return nil, nil, fmt.Errorf("invalid contract: %w", err)
+	}
 	flow, err := spec.LoadFlowSpec(flowPath)
 	if err != nil {
 		return nil, nil, err

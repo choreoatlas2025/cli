@@ -18,7 +18,7 @@ choreoatlas validate [options]
 | `--trace` | string | *(required)* | Path to local native trace JSON (top-level `spans` array) |
 | `--semantic` | bool | `true` | Enable semantic validation (CEL) |
 | `--causality` | string | `temporal` | Causality check mode: `strict`, `temporal`, or `off` |
-| `--causality-tolerance` | int | `50` | Nonnegative tolerance in milliseconds for metadata timing constraints |
+| `--causality-tolerance` | int | `50` | Nonnegative tolerance in milliseconds for completion dependencies and metadata timing constraints |
 | `--baseline` | string | - | Path to baseline file for comparison |
 | `--baseline-missing` | string | `fail` | Strategy when baseline file is missing: `fail` or `treat-as-absolute` |
 | `--threshold-steps` | float | `0.9` | Absolute minimum step coverage in every mode (0.0-1.0) |
@@ -52,6 +52,18 @@ protobuf payloads. Convert other formats to native trace JSON outside CE.
 OpenTelemetry-derived attributes in native spans can still be used for local
 validation and causal checks.
 
+One input represents one trace. If `attributes["otlp.trace_id"]` is supplied,
+all spans must carry the same nonempty string ID. Mixed IDs, partially labelled
+inputs, and malformed identity attributes fail validation, including in `off`
+mode. Inputs with no trace IDs remain supported and reports mark their identity
+as `file-only`; a file hash does not prove that all spans came from one request.
+
+In `temporal` mode, each declared predecessor must complete before the next step
+starts, within the configured tolerance. A step after a parallel group waits for
+every member. `strict` instead verifies direct parent-child nesting and its time
+bounds. Timestamp-based validation requires end timestamps. `off` explicitly
+disables these timing dependencies.
+
 ## Exit Codes
 
 The validate command uses standardized exit codes for CI/CD integration:
@@ -64,16 +76,27 @@ The validate command uses standardized exit codes for CI/CD integration:
 | `3` | `ValidationFailed` | Validation failures (spec vs trace mismatch) |
 | `4` | `GateFailed` | Gate policy violations (thresholds not met) |
 
-Any failed step or evaluated CEL condition makes runtime validation fail with code
+Any failed step or CEL compilation, type, or runtime error makes runtime validation fail with code
 `3`, even if coverage thresholds pass. Code `4` applies only when runtime
 validation passes and the threshold policy fails. Reports use the same final
 decision: JSON and HTML expose `success`, `status`, and `exitCode`; JUnit includes
 a failing policy test case when thresholds fail.
 
-Baseline format `2` binds FlowSpec and every referenced ServiceSpec by SHA-256.
-Record a new baseline after a contract file changes or when migrating from format
-`1`. `treat-as-absolute` handles a missing file only; malformed or incompatible
+Declared conditions must return a boolean. Errors and unevaluated condition
+results cannot produce a successful report; relaxing thresholds or leaving
+`--skip-as-fail` disabled does not suppress these failures.
+
+Baseline format `3` binds FlowSpec and every referenced ServiceSpec by SHA-256,
+and records the validator version, commit and binary hash, semantic/causality
+settings, source trace hash and available trace identity. Record a new baseline
+after a contract, validator or validation setting changes, or when migrating from
+format `1` or `2`. Comparison traces may differ from the source recording.
+`treat-as-absolute` handles a missing file only; malformed or incompatible
 baselines remain errors. Threshold values must be finite numbers between 0 and 1.
+
+`baseline record` accepts `--semantic`, `--causality`, and
+`--causality-tolerance` with the same defaults as `validate`. Use the same settings
+for recording and consumption. Empty or whitespace-only titles cannot be recorded.
 
 Reports bind contract files, trace data, the consumed baseline, validator binary,
 and validation settings under `inputs` (JUnit: `result.inputs` property).

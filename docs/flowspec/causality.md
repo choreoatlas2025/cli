@@ -13,7 +13,7 @@ Automatically detects circular dependencies in your service call graph to preven
 Validates three types of relationships with configurable time tolerance:
 
 - **Parent-Child Relationships**: Ensures child spans execute within their parent's time bounds
-- **Temporal Dependencies**: Validates that each declared predecessor starts no later than its successor
+- **Temporal Dependencies**: Validates that every declared predecessor completes before its successor starts, within tolerance
 - **Concurrent Relationships**: Verifies that concurrent operations actually overlap in time
 
 ### 3. Topological Sorting
@@ -49,12 +49,21 @@ For spans with parent-child relationships:
 
 ### Temporal Constraints
 For sequential operations (A → B):
-- A.startTime must be ≤ B.startTime; overlapping parent and child calls are permitted
+- A.endTime must be ≤ B.startTime + tolerance
+- Every member of a preceding parallel group must complete before the next step
+- `strict` uses direct parent-child nesting instead; a nested call is not a completion dependency
 
 Every call consumes a distinct span. Matching and semantic evaluation use the
 same span and step input, including repeated operations and calls attached to
 parallel containers. Adding parent attributes does not select a weaker matching
 algorithm. Duplicate span identities are rejected.
+
+Inputs containing trace IDs must label every span with the same nonempty ID.
+Cross-trace and partially labelled inputs are rejected even in `off` mode, so
+matching cannot assemble a successful path from different labelled requests.
+Unlabelled native JSON remains supported, but its identity is reported as
+`file-only` and cannot establish request membership. Missing end timestamps fail
+timestamp-based validation; negative or inverted time ranges are invalid.
 
 ### Concurrency Constraints
 For parallel operations marked as concurrent:

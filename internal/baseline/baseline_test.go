@@ -10,8 +10,17 @@ import (
 	"time"
 
 	"github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
+	"gopkg.in/yaml.v3"
 )
+
+func testProvenance() spec.ExecutionIdentity {
+	return spec.ExecutionIdentity{
+		Version: "test", GitCommit: "test", ValidatorHash: "sha256:" + strings.Repeat("a", 64), TraceHash: "sha256:" + strings.Repeat("b", 64),
+		Config: spec.ValidationConfig{Semantic: true, Causality: "temporal", ToleranceMs: 50}, TraceIdentity: trace.Identity{Binding: "file-only"},
+	}
+}
 
 func TestRecordBaseline(t *testing.T) {
 	// Create a test flow spec
@@ -19,6 +28,7 @@ func TestRecordBaseline(t *testing.T) {
 		Info: spec.FlowInfo{
 			Title: "Test Flow",
 		},
+		Services: map[string]spec.ServiceBinding{"svc": {Spec: "svc.yaml"}},
 		Flow: []spec.FlowStep{
 			{Step: "step1", Call: "svc.step1"},
 			{Step: "step2", Call: "svc.step2"},
@@ -52,18 +62,34 @@ func TestRecordBaseline(t *testing.T) {
 	// Create temporary flow file
 	tempDir := t.TempDir()
 	flowPath := filepath.Join(tempDir, "test.flowspec.yaml")
-	err := os.WriteFile(flowPath, []byte("test content"), 0644)
+	data, err := yaml.Marshal(flowSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(flowPath, data, 0644)
 	if err != nil {
 		t.Fatalf("Failed to create temp flow file: %v", err)
 	}
+	service := spec.ServiceSpecFile{Service: "svc", Operations: []spec.ServiceOperation{
+		{OperationId: "step1", Postconditions: map[string]string{"cond1": "true", "cond2": "true"}},
+		{OperationId: "step2", Postconditions: map[string]string{"cond3": "true"}},
+		{OperationId: "step3"},
+	}}
+	data, err = yaml.Marshal(service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "svc.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Failed or internally inconsistent results cannot become a baseline.
-	if _, err := RecordBaseline(flowSpec, results, flowPath); err == nil {
+	if _, err := RecordBaseline(flowSpec, results, flowPath, testProvenance()); err == nil {
 		t.Fatal("expected failed results to be rejected")
 	}
 	results[1].Conditions[0].Status = "PASS"
 	results[2].Status = "PASS"
-	baseline, err := RecordBaseline(flowSpec, results, flowPath)
+	baseline, err := RecordBaseline(flowSpec, results, flowPath, testProvenance())
 	if err != nil {
 		t.Fatalf("RecordBaseline failed: %v", err)
 	}
@@ -210,7 +236,8 @@ func TestEvaluateGate(t *testing.T) {
 
 func TestSaveAndLoadBaseline(t *testing.T) {
 	baseline := &BaselineData{
-		SchemaVersion: "2",
+		SchemaVersion: "3",
+		Provenance:    testProvenance(),
 		FlowID:        "Test Flow",
 		FlowHash:      "sha256:" + strings.Repeat("a", 64),
 		ServiceHashes: map[string]string{},

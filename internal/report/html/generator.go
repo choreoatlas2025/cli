@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/trace"
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -29,16 +30,18 @@ type HTMLData struct {
 }
 
 type InputBinding struct {
-	Contract      spec.ContractIdentity `json:"contract"`
-	TraceHash     string                `json:"traceHash"`
-	BaselineHash  string                `json:"baselineHash,omitempty"`
-	Version       string                `json:"version"`
-	GitCommit     string                `json:"gitCommit"`
-	Semantic      bool                  `json:"semantic"`
-	Causality     string                `json:"causality"`
-	ToleranceMs   int64                 `json:"causalityToleranceMs"`
-	ValidatorHash string                `json:"validatorHash"`
-	Policy        map[string]any        `json:"policy"`
+	Contract           spec.ContractIdentity   `json:"contract"`
+	TraceHash          string                  `json:"traceHash"`
+	TraceIdentity      trace.Identity          `json:"traceIdentity"`
+	BaselineProvenance *spec.ExecutionIdentity `json:"baselineProvenance,omitempty"`
+	BaselineHash       string                  `json:"baselineHash,omitempty"`
+	Version            string                  `json:"version"`
+	GitCommit          string                  `json:"gitCommit"`
+	Semantic           bool                    `json:"semantic"`
+	Causality          string                  `json:"causality"`
+	ToleranceMs        int64                   `json:"causalityToleranceMs"`
+	ValidatorHash      string                  `json:"validatorHash"`
+	Policy             map[string]any          `json:"policy"`
 }
 
 // CoverageSummary represents coverage statistics for HTML display

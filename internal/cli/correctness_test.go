@@ -40,7 +40,11 @@ func correctnessCommand(t *testing.T, dir string, want int, args ...string) stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(bin, append([]string{"-test.run=^TestCorrectnessCLIProcess$", "--"}, args...)...)
+	commandArgs := append([]string{"-test.run=^TestCorrectnessCLIProcess$", "--"}, args...)
+	if external := os.Getenv("CHOREOATLAS_CORRECTNESS_BINARY"); external != "" {
+		bin, commandArgs = external, args
+	}
+	cmd := exec.Command(bin, commandArgs...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CHOREOATLAS_CORRECTNESS_PROCESS=1")
 	out, err := cmd.CombinedOutput()
@@ -118,11 +122,11 @@ func TestCorrectnessResultSemanticFailure(t *testing.T) {
 }
 
 func TestCorrectnessResultReports(t *testing.T) {
-	dir, _, _ := correctnessFixture(t, []string{"A"}, "response.body.required == true")
+	dir, _, _ := correctnessFixture(t, []string{"A"}, "true")
 	for _, format := range []string{"json", "junit", "html"} {
 		t.Run(format, func(t *testing.T) {
 			path := "report." + format
-			correctnessCommand(t, dir, 4, "validate", "--flow", "flow.yaml", "--trace", "trace.json", "--skip-as-fail", "--report-format", format, "--report-out", path)
+			correctnessCommand(t, dir, 4, "validate", "--flow", "flow.yaml", "--trace", "trace.json", "--semantic=false", "--report-format", format, "--report-out", path)
 			b, err := os.ReadFile(filepath.Join(dir, path))
 			if err != nil {
 				t.Fatal(err)

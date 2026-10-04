@@ -16,7 +16,7 @@ import (
 
 // 条件结果
 type ConditionResult struct {
-	Kind    string `json:"kind"`    // "pre" | "post"
+	Kind    string `json:"kind"` // "pre" | "post"
 	Name    string `json:"name"`
 	Expr    string `json:"expr"`
 	Status  string `json:"status"`  // "PASS" | "FAIL" | "SKIP"
@@ -128,7 +128,8 @@ func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
 }
 
 // EvaluateConditions 对某一步骤的 pre/postconditions 进行求值
-// 说明：编译错误/不支持表达式 -> SKIP，不计为失败
+// Declared conditions must evaluate successfully to a boolean. Evaluation
+// errors are failures, not skipped evidence.
 func EvaluateConditions(
 	step spec.FlowStep,
 	op spec.ServiceOperation,
@@ -146,8 +147,9 @@ func EvaluateConditions(
 		ok, phase, err := evalCELBool(expr, envVars)
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
-			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
+			cr.Status = "FAIL"
+			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
+			passAll = false
 		} else if ok {
 			cr.Status = "PASS"
 		} else {
@@ -163,8 +165,9 @@ func EvaluateConditions(
 		ok, phase, err := evalCELBool(expr, envVars)
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
-			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
+			cr.Status = "FAIL"
+			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
+			passAll = false
 		} else if ok {
 			cr.Status = "PASS"
 		} else {

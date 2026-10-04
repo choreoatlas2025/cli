@@ -41,8 +41,9 @@ func runValidate(args []string) {
 	if err := baseline.ValidateThresholds(thresholds); err != nil {
 		exitErr(err)
 	}
-	if *causalityTolerance < 0 {
-		exitErr(fmt.Errorf("invalid causality-tolerance: must be nonnegative"))
+	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causalityMode, ToleranceMs: int64(*causalityTolerance)}
+	if err := configureValidation(config); err != nil {
+		exitErr(err)
 	}
 	if *baselineMissing != "fail" && *baselineMissing != "treat-as-absolute" {
 		exitErr(fmt.Errorf("invalid baseline-missing strategy: %s", *baselineMissing))
@@ -83,24 +84,6 @@ func runValidate(args []string) {
 		exitErr(err)
 	}
 
-	// Set semantic validation switch
-	validate.EnableSemantic = *semantic
-
-	// Set causality check mode
-	switch validate.CausalityMode(*causalityMode) {
-	case validate.CausalityStrict:
-		validate.GlobalCausalityMode = validate.CausalityStrict
-	case validate.CausalityTemporal:
-		validate.GlobalCausalityMode = validate.CausalityTemporal
-	case validate.CausalityOff:
-		validate.GlobalCausalityMode = validate.CausalityOff
-	default:
-		exitErr(fmt.Errorf("invalid causality mode: %s, supported modes: strict|temporal|off", *causalityMode))
-	}
-
-	// Set causality tolerance
-	validate.GlobalCausalityToleranceMs = int64(*causalityTolerance)
-
 	results, _ := validate.ValidateAgainstTrace(flow, opIndex, tr)
 
 	// Baseline gate check
@@ -125,6 +108,13 @@ func runValidate(args []string) {
 		}
 		if baselineData != nil {
 			if err := baseline.ValidateCompatibility(baselineData, flow, *flowPath); err != nil {
+				exitErr(err)
+			}
+			current, err := executionIdentity(tr, *tracePath, config)
+			if err != nil {
+				exitErr(err)
+			}
+			if err := baseline.ValidateExecution(baselineData, current); err != nil {
 				exitErr(err)
 			}
 		}
@@ -154,7 +144,13 @@ func runValidate(args []string) {
 			exitErr(err)
 		}
 		inputs.Policy = gateResult.Details
+		// A failed mixed-ID trace remains reportable; expose that identity was not verified.
+		inputs.TraceIdentity, err = trace.Identify(tr.Spans)
+		if err != nil {
+			inputs.TraceIdentity = trace.Identity{Binding: "invalid"}
+		}
 		if baselineData != nil {
+			inputs.BaselineProvenance = &baselineData.Provenance
 			inputs.BaselineHash, err = spec.HashFile(*baselinePath)
 			if err != nil {
 				exitErr(err)

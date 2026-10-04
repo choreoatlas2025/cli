@@ -45,6 +45,13 @@ func ValidateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.
 }
 
 func validateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
+	if GlobalCausalityMode != CausalityOff {
+		for _, span := range tr.Spans {
+			if span.EndNanos == 0 {
+				return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: "span end timestamp is required for causality validation"}}, false
+			}
+		}
+	}
 	if fs.IsGraphMode() {
 		return validateGraphAgainstTrace(fs, opIndex, tr)
 	}
@@ -289,14 +296,18 @@ func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.G
 				return fmt.Errorf("node %s should be child of %s (strict mode)", node.ID, predID)
 			}
 		case CausalityTemporal:
-			// Check temporal ordering: predecessor should start before or at the same time as current
-			if nodeSpan.StartNanos < predSpan.StartNanos {
-				return fmt.Errorf("node %s starts before predecessor %s (temporal mode)", node.ID, predID)
+			if !completesBefore(predSpan.EndNanos, nodeSpan.StartNanos) {
+				return fmt.Errorf("node %s starts before predecessor %s completes (temporal mode)", node.ID, predID)
 			}
 		}
 	}
 
 	return nil
+}
+
+// Compare a nonnegative time difference without adding tolerance to a timestamp.
+func completesBefore(end, start int64) bool {
+	return end <= start || end-start <= GlobalCausalityToleranceMs*1000000
 }
 
 // Helper functions

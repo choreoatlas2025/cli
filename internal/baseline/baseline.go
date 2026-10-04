@@ -22,6 +22,7 @@ type BaselineData struct {
 	FlowID        string                     `json:"flowId"`
 	FlowHash      string                     `json:"flowHash"`
 	ServiceHashes map[string]string          `json:"serviceHashes"`
+	Provenance    spec.ExecutionIdentity     `json:"provenance"`
 	GeneratedAt   time.Time                  `json:"generatedAt"`
 	StepsTotal    int                        `json:"stepsTotal"`
 	CoveredSteps  []string                   `json:"coveredSteps"`
@@ -66,7 +67,10 @@ func ValidateThresholds(t ThresholdConfig) error {
 }
 
 // RecordBaseline creates a baseline from validation results
-func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flowPath string) (*BaselineData, error) {
+func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flowPath string, provenance spec.ExecutionIdentity) (*BaselineData, error) {
+	if strings.TrimSpace(flowSpec.Info.Title) == "" {
+		return nil, fmt.Errorf("invalid baseline contract: info.title must not be empty")
+	}
 	if !validate.AllStepsPassed(results) || len(results) != flowSpec.GetStepsCount() {
 		return nil, ErrIncompleteValidation
 	}
@@ -115,21 +119,29 @@ func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flow
 	}
 
 	baseline := &BaselineData{
-		SchemaVersion: "2",
+		SchemaVersion: "3",
 		FlowID:        identity.FlowID,
 		FlowHash:      identity.FlowHash,
 		ServiceHashes: identity.ServiceHashes,
+		Provenance:    provenance,
 		GeneratedAt:   time.Now().UTC(),
 		StepsTotal:    flowSpec.GetStepsCount(),
 		CoveredSteps:  coveredSteps,
 		Conditions:    conditions,
 	}
 
+	// Never write an object which would fail the normal consumption checks.
+	if err := ValidateCompatibility(baseline, flowSpec, flowPath); err != nil {
+		return nil, err
+	}
 	return baseline, nil
 }
 
 // SaveBaseline writes baseline data to a JSON file
 func SaveBaseline(baseline *BaselineData, outputPath string) error {
+	if err := validateBaselineData(baseline); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(baseline, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal baseline: %w", err)
@@ -157,10 +169,13 @@ func LoadBaseline(path string) (*BaselineData, error) {
 }
 
 func validateBaselineData(b *BaselineData) error {
-	if b.SchemaVersion != "2" {
-		return fmt.Errorf("invalid baseline schema version %q: record a new baseline (version 2)", b.SchemaVersion)
+	if b.SchemaVersion != "3" {
+		return fmt.Errorf("invalid baseline schema version %q: record a new baseline (version 3)", b.SchemaVersion)
 	}
-	if b.FlowID == "" || !validHash(b.FlowHash) || b.StepsTotal <= 0 || len(b.CoveredSteps) != b.StepsTotal {
+	if err := b.Provenance.Validate(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(b.FlowID) == "" || !validHash(b.FlowHash) || b.StepsTotal <= 0 || len(b.CoveredSteps) != b.StepsTotal {
 		return fmt.Errorf("invalid baseline: incomplete identity or coverage")
 	}
 	if b.ServiceHashes == nil {
@@ -187,6 +202,19 @@ func validateBaselineData(b *BaselineData) error {
 				return fmt.Errorf("invalid baseline: unsuccessful condition %s", name)
 			}
 		}
+	}
+	return nil
+}
+
+// The comparison trace is intentionally different from the recording trace.
+// The tool and validation settings must be the same for comparable results.
+func ValidateExecution(b *BaselineData, current spec.ExecutionIdentity) error {
+	if err := current.Config.Validate(); err != nil {
+		return err
+	}
+	recorded := b.Provenance
+	if recorded.Version != current.Version || recorded.GitCommit != current.GitCommit || recorded.ValidatorHash != current.ValidatorHash || recorded.Config != current.Config {
+		return fmt.Errorf("invalid baseline: validator or validation configuration changed; record a new baseline")
 	}
 	return nil
 }

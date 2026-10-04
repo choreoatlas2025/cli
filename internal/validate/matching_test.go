@@ -52,6 +52,9 @@ func TestMatchingParallelRequiresOverlapAndParentCall(t *testing.T) {
 }
 
 func TestMatchingGraphUsesExactPredecessorInstance(t *testing.T) {
+	previous := GlobalCausalityToleranceMs
+	GlobalCausalityToleranceMs = 0
+	t.Cleanup(func() { GlobalCausalityToleranceMs = previous })
 	flow := &spec.FlowSpec{Graph: &spec.GraphSpec{
 		Nodes: []spec.GraphNode{{ID: "first", Call: "svc.repeat"}, {ID: "second", Call: "svc.repeat"}, {ID: "last", Call: "svc.last"}},
 		Edges: []spec.GraphEdge{{From: "first", To: "second"}, {From: "second", To: "last"}},
@@ -94,6 +97,7 @@ func TestMatchingCausalityModes(t *testing.T) {
 		t.Fatalf("wrong strict parent passed: %+v", results)
 	}
 	GlobalCausalityMode = CausalityTemporal
+	tr.Spans[1].StartNanos, tr.Spans[1].EndNanos = 5e9, 6e9
 	if results, passed := ValidateAgainstTrace(flow, nil, tr); !passed {
 		t.Fatalf("valid temporal order failed: %+v", results)
 	}

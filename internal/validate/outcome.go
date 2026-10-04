@@ -17,13 +17,20 @@ func AllStepsPassed(steps []StepResult) bool {
 		return false
 	}
 	for _, step := range steps {
-		if step.Status != "PASS" {
+		if !StepPassed(step) {
 			return false
 		}
-		for _, cond := range step.Conditions {
-			if cond.Status == "FAIL" {
-				return false
-			}
+	}
+	return true
+}
+
+func StepPassed(step StepResult) bool {
+	if step.Status != "PASS" {
+		return false
+	}
+	for _, cond := range step.Conditions {
+		if cond.Status != "PASS" {
+			return false
 		}
 	}
 	return true
