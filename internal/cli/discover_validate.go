@@ -9,40 +9,14 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/choreoatlas2025/cli/internal/schemas"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
-	"github.com/choreoatlas2025/cli/internal/validate"
 	"gopkg.in/yaml.v3"
 )
 
 func validateGeneratedFlow(path string) error {
-	if err := spec.ValidateYAMLWithSchemaFS(path, schemas.FS, "flowspec.schema.json"); err != nil {
-		return fmt.Errorf("invalid generated FlowSpec: %w", err)
-	}
-	flow, err := spec.LoadFlowSpec(path)
-	if err != nil {
-		return err
-	}
-	for alias, bind := range flow.Services {
-		if err := spec.ValidateYAMLWithSchemaFS(spec.ResolvePath(path, bind.Spec), schemas.FS, "servicespec.schema.json"); err != nil {
-			return fmt.Errorf("invalid generated ServiceSpec %s: %w", alias, err)
-		}
-	}
-	_, operations, err := flow.BuildOperationIndex(path)
-	if err != nil {
-		return err
-	}
-	issues, err := validate.LintFlow(path, flow, operations)
-	if err != nil {
-		return err
-	}
-	for _, issue := range issues {
-		if issue.Level == "ERROR" {
-			return fmt.Errorf("invalid generated contract: %s", issue.Msg)
-		}
-	}
-	return nil
+	_, _, err := loadAndValidateFlow(path)
+	return err
 }
 
 // validateAndPersistFlow retains the single-file helper used by discovery tests.

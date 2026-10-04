@@ -69,9 +69,10 @@ type SpanInfo struct {
 
 // GateResult represents baseline gate evaluation result
 type GateResult struct {
-	Checked bool                   `json:"checked"`
-	Passed  bool                   `json:"passed"`
-	Details map[string]interface{} `json:"details"`
+	Checked    bool                   `json:"checked"`
+	Passed     bool                   `json:"passed"`
+	Details    map[string]interface{} `json:"details"`
+	Violations []string               `json:"violations,omitempty"`
 }
 
 // WriteHTMLReport generates and writes an HTML report file

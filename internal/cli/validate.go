@@ -54,17 +54,7 @@ func runValidate(args []string) {
 		exitErr(errors.New("--trace parameter is required"))
 	}
 
-	flow, err := spec.LoadFlowSpec(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-	_, opIndex, err := flow.BuildOperationIndex(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-
-	// lint 检查
-	issues, err := validate.LintFlow(*flowPath, flow, opIndex)
+	flow, opIndex, issues, err := loadContract(*flowPath, true)
 	if err != nil {
 		exitErr(err)
 	}
@@ -172,9 +162,10 @@ func runValidate(args []string) {
 		var htmlGateResult *html.GateResult
 		if gateResult != nil {
 			htmlGateResult = &html.GateResult{
-				Checked: gateResult.Checked,
-				Passed:  gateResult.Passed,
-				Details: gateResult.Details,
+				Checked:    gateResult.Checked,
+				Passed:     gateResult.Passed,
+				Details:    gateResult.Details,
+				Violations: gateResult.Violations,
 			}
 		}
 

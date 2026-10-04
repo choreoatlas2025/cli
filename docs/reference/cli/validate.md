@@ -66,6 +66,12 @@ disables these timing dependencies.
 
 ## Exit Codes
 
+The default contract checks are shared with `lint`, discovery and baseline
+recording: the embedded FlowSpec and ServiceSpec schemas run before lint and
+runtime matching. Empty titles or service names and duplicate `operationId`
+values are input errors (`2`); definition order cannot choose which conditions
+apply. The explicit `lint --schema=false` option skips schema checks only.
+
 The validate command uses standardized exit codes for CI/CD integration:
 
 | Code | Constant | Description |
@@ -100,6 +106,27 @@ for recording and consumption. Empty or whitespace-only titles cannot be recorde
 
 Reports bind contract files, trace data, the consumed baseline, validator binary,
 and validation settings under `inputs` (JUnit: `result.inputs` property).
+
+## Cross-step values
+
+With semantic validation enabled, a successful step evaluates its `output` CEL
+expressions against `request`, `response`, `span` and `vars`. Subsequent steps can
+read the exported values through `${name.field}` in `input` and `vars.name.field`
+in conditions. Whole-value references retain their number, boolean, object or
+list type. References embedded in text accept scalar values only. Flat input
+maps appear as `request.body`; explicit `body`, `path`, `query` or `headers`
+maps retain that request structure.
+
+Flow steps publish outputs after their stage. Parallel siblings cannot read
+each other's outputs. DAG nodes see only their ancestors' successful outputs;
+sequential descendants may replace an earlier value, but independent predecessors
+exporting the same variable are ambiguous and fail. A failed step publishes no
+outputs. Failed output expressions fail the step with code `3`.
+
+Initial external variables have no injection option. Reading an unresolved input
+reference produces a CEL error; an unused input does not prevent an independent
+response assertion from being evaluated. `--semantic=false` disables both
+conditions and output evaluation. Values persist only for the current invocation.
 
 ## Examples
 

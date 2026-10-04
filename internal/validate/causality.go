@@ -140,6 +140,7 @@ func buildTemporalEdges(graph *CallGraph) {
 // matchedFlowStep keeps structural matching and semantic evaluation bound to
 // the same call instance. A matched span can be consumed only once.
 type matchedFlowStep struct {
+	stage  int
 	step   spec.FlowStep
 	node   *CallNode
 	result StepResult
@@ -177,7 +178,8 @@ func (m *flowMatcher) match(step spec.FlowStep) matchedFlowStep {
 		return r
 	}
 	for _, node := range m.nodes {
-		if m.used[node] || normalize(node.Service) != normalize(svc) || normalize(node.Operation) != normalize(op) {
+		span := trace.Span{Service: node.Service, Name: node.Operation, Attributes: node.Attributes}
+		if m.used[node] || normalize(node.Service) != normalize(svc) || !spec.OperationMatches(op, span) {
 			continue
 		}
 		valid := true
@@ -227,16 +229,24 @@ func (m *flowMatcher) parallel(steps []spec.FlowStep) []matchedFlowStep {
 func matchFlowSteps(flow *spec.FlowSpec, graph *CallGraph) []matchedFlowStep {
 	m := newFlowMatcher(graph)
 	var matched []matchedFlowStep
+	stage := 0
 	for _, step := range flow.Flow {
 		if step.Call != "" || len(step.Parallel) == 0 {
 			r := m.match(step)
+			r.stage = stage
+			stage++
 			matched = append(matched, r)
 			if r.node != nil {
 				m.previous = []*CallNode{r.node}
 			}
 		}
 		if len(step.Parallel) > 0 {
-			matched = append(matched, m.parallel(step.Parallel)...)
+			children := m.parallel(step.Parallel)
+			for i := range children {
+				children[i].stage = stage
+			}
+			stage++
+			matched = append(matched, children...)
 		}
 	}
 	return matched

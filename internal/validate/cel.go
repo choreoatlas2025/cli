@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
@@ -25,21 +26,32 @@ type ConditionResult struct {
 
 // 将 FlowSpec 的 input + span.attributes 投影为 CEL 环境可用的变量
 // 约定：
-// - request: 来自 step.input（会做 ${var} 的占位保留，不做替换以免误导，可后续扩展变量解引用）
-// - response: 从 span.attributes 映射（response.status 优先取：response.status|http.status_code|statusCode）
+// - request: declared input, with typed references resolved from preceding outputs
+// - response: 从 span.attributes 映射，优先使用 response.status，再使用 HTTP 状态码
 // - span: { name, service, attributes }
-// - vars: 从前序步骤输出收集（可选，当前为占位）
+// - vars: validated outputs visible to this step
 func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any) (map[string]any, error) {
-	// request 直接采用 FlowSpec 中的 input 原样
+	// Resolve declared input without treating missing variables as literal strings.
 	request := map[string]any{}
 	if step.Input != nil {
-		request["body"] = step.Input // 约定 input 即 body，满足大多数 REST 场景
+		input := resolveInput(step.Input, vars).(map[string]any)
+		structured := false
+		for _, key := range []string{"body", "path", "query", "headers"} {
+			if _, ok := input[key]; ok {
+				structured = true
+			}
+		}
+		if structured {
+			request = input
+		} else {
+			request["body"] = input
+		}
 	}
 
 	// 响应投影：尽量从 attributes 推断出 response.status / response.body
 	response := map[string]any{}
 	// 提取 status
-	statusKeys := []string{"response.status", "http.status_code", "statusCode"}
+	statusKeys := []string{"response.status", "http.response.status_code", "http.status_code", "statusCode"}
 	var status any
 	for _, k := range statusKeys {
 		if v, ok := sp.Attributes[k]; ok {
@@ -89,7 +101,7 @@ func normalizeExpr(e string) string {
 	})
 }
 
-func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
+func evalCELValue(expr string, envVars map[string]any) (ref.Val, string, error) {
 	e := normalizeExpr(expr)
 
 	// 使用新版 CEL API 创建环境
@@ -100,22 +112,30 @@ func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
 		cel.Variable("vars", cel.DynType),
 	)
 	if err != nil {
-		return false, "", fmt.Errorf("create cel env: %w", err)
+		return nil, "", fmt.Errorf("create cel env: %w", err)
 	}
 
 	ast, issues := celEnv.Compile(e)
 	if issues != nil && issues.Err() != nil {
-		return false, "compile", issues.Err()
+		return nil, "compile", issues.Err()
 	}
 
 	prg, err := celEnv.Program(ast)
 	if err != nil {
-		return false, "program", err
+		return nil, "program", err
 	}
 
 	out, _, err := prg.Eval(envVars)
 	if err != nil {
-		return false, "runtime", err
+		return nil, "runtime", err
+	}
+	return out, "", nil
+}
+
+func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
+	out, phase, err := evalCELValue(expr, envVars)
+	if err != nil {
+		return false, phase, err
 	}
 	if out.Type() == types.BoolType {
 		return out.Value().(bool), "", nil

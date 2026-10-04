@@ -80,23 +80,7 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 
 	// 执行因果校验
 	matched := matchFlowSteps(fs, graph)
-	var results []StepResult
-	for _, match := range matched {
-		r := match.result
-		if r.Status == "PASS" && EnableSemantic {
-			svc, op, _ := splitCall(match.step.Call)
-			if opSpec, ok := opIndex[svc][op]; ok {
-				node := match.node
-				span := trace.Span{Service: node.Service, Name: node.Operation, StartNanos: node.StartNanos, EndNanos: node.EndNanos, Attributes: node.Attributes}
-				conditions, passed := EvaluateConditions(match.step, opSpec, span, map[string]any{})
-				r.Conditions = conditions
-				if !passed {
-					r.Status, r.Message = "FAIL", "semantic validation failed"
-				}
-			}
-		}
-		results = append(results, r)
-	}
+	results := evaluateFlowMatches(matched, opIndex)
 	allPassed := AllStepsPassed(results)
 
 	// 如果有违规，添加到结果中
@@ -162,8 +146,12 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 	// Build span matching index by service.operation
 	spanIndex := make(map[string][]trace.Span)
 	for _, span := range tr.Spans {
-		key := fmt.Sprintf("%s.%s", normalize(span.Service), normalize(span.Name))
-		spanIndex[key] = append(spanIndex[key], span)
+		canonical := normalize(spec.ComputeOperationID(span))
+		spanIndex[normalize(span.Service)+"."+canonical] = append(spanIndex[normalize(span.Service)+"."+canonical], span)
+		if raw := normalize(span.Name); raw != canonical && spec.OperationMatches(span.Name, span) {
+			key := normalize(span.Service) + "." + raw
+			spanIndex[key] = append(spanIndex[key], span)
+		}
 	}
 
 	// Validate each node in topological order
@@ -186,6 +174,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 		sort.SliceStable(spanIndex[key], func(i, j int) bool { return spanIndex[key][i].StartNanos < spanIndex[key][j].StartNanos })
 	}
 	matchedSpans := map[string]*trace.Span{}
+	exports := map[string]map[string]any{}
 	// Track matched spans to avoid double-matching
 	usedSpans := make(map[string]bool) // span service:name:startNanos
 
@@ -234,47 +223,16 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 		usedSpans[getSpanID(*matchedSpan)] = true
 		matchedSpans[node.ID] = matchedSpan
 
-		// Basic semantic validation
-		var conditions []ConditionResult
-		if EnableSemantic {
-			service, operation, _ := splitCall(node.Call)
-			// Similar to flow validation - check service operation conditions
-			if ops, ok := opIndex[service]; ok {
-				if op, exists := ops[operation]; exists {
-					// Create a temporary FlowStep for condition evaluation
-					tempStep := spec.FlowStep{
-						Step:   node.ID,
-						Call:   node.Call,
-						Input:  node.Input,
-						Output: node.Output,
-						Meta:   node.Meta,
-					}
-					conditions, _ = EvaluateConditions(tempStep, op, *matchedSpan, nil)
-				}
-			}
+		step := spec.FlowStep{Step: node.ID, Call: node.Call, Input: node.Input, Output: node.Output, Meta: node.Meta}
+		result := StepResult{Step: node.ID, Call: node.Call, Status: "PASS"}
+		vars, err := graphVariables(fs.Graph, node.ID, topOrder, exports)
+		if err != nil {
+			result.Status, result.Message = "FAIL", err.Error()
+		} else {
+			result, exports[node.ID] = evaluateStep(result, step, *matchedSpan, opIndex, vars)
 		}
-
-		// Determine overall status based on conditions
-		status := "PASS"
-		var message string
-		if EnableSemantic && len(conditions) > 0 {
-			for _, cond := range conditions {
-				if cond.Status == "FAIL" {
-					status = "FAIL"
-					message = "semantic validation failed"
-					okAll = false
-					break
-				}
-			}
-		}
-
-		results = append(results, StepResult{
-			Step:       node.ID,
-			Call:       node.Call,
-			Status:     status,
-			Message:    message,
-			Conditions: conditions,
-		})
+		okAll = okAll && result.Status == "PASS"
+		results = append(results, result)
 	}
 
 	return results, okAll

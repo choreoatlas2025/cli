@@ -38,13 +38,24 @@ func LoadServiceSpec(path string) (*ServiceSpecFile, error) {
 	if err := yaml.Unmarshal(b, &ss); err != nil {
 		return nil, fmt.Errorf("failed to parse servicespec: %w", err)
 	}
+	seen := map[string]bool{}
+	for _, op := range ss.Operations {
+		if seen[op.OperationId] {
+			return nil, fmt.Errorf("invalid ServiceSpec %s: duplicate operationId %q", path, op.OperationId)
+		}
+		seen[op.OperationId] = true
+	}
 	return &ss, nil
 }
 
 // BuildServiceSpecFiles generates data without changing any destination files.
 func BuildServiceSpecFiles(spans []trace.Span) (map[string][]byte, error) {
+	groups, err := groupSpansByService(spans)
+	if err != nil {
+		return nil, err
+	}
 	files := map[string][]byte{}
-	for service, operations := range groupSpansByService(spans) {
+	for service, operations := range groups {
 		name := ServiceSpecFilename(service)
 		if _, exists := files[name]; exists {
 			return nil, fmt.Errorf("invalid service names: filename collision for %s", name)
@@ -87,11 +98,12 @@ func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
 }
 
 // groupSpansByService 按服务分组 spans 并生成操作
-func groupSpansByService(spans []trace.Span) map[string][]ServiceOperation {
+func groupSpansByService(spans []trace.Span) (map[string][]ServiceOperation, error) {
 	serviceOps := make(map[string][]ServiceOperation)
 
 	// 按服务和操作分组
 	opGroups := make(map[string]map[string][]trace.Span)
+	sources := make(map[string]map[string]string)
 
 	for _, span := range spans {
 		if span.Service == "" || span.Name == "" {
@@ -103,30 +115,27 @@ func groupSpansByService(spans []trace.Span) map[string][]ServiceOperation {
 
 		if _, exists := opGroups[service]; !exists {
 			opGroups[service] = make(map[string][]trace.Span)
+			sources[service] = make(map[string]string)
 		}
+		source := operationSource(span)
+		if previous, exists := sources[service][opName]; exists && previous != source {
+			return nil, fmt.Errorf("invalid operation identity: service %q operationId %q merges %q and %q", service, opName, previous, source)
+		}
+		sources[service][opName] = source
 		opGroups[service][opName] = append(opGroups[service][opName], span)
 	}
 
 	// 为每个服务的每个操作生成 ServiceOperation
 	for service, ops := range opGroups {
 		var operations []ServiceOperation
-		used := map[string]bool{}
 		for opName, spanList := range ops {
-			// Simple collision handling: append _2, _3...
-			base := opName
-			c := 2
-			for used[opName] {
-				opName = fmt.Sprintf("%s_%d", base, c)
-				c++
-			}
-			used[opName] = true
 			op := generateServiceOperation(opName, spanList)
 			operations = append(operations, op)
 		}
 		serviceOps[service] = operations
 	}
 
-	return serviceOps
+	return serviceOps, nil
 }
 
 // generateServiceOperation 从 span 列表生成单个 ServiceOperation
@@ -164,14 +173,14 @@ func buildCELExpression(key string, value interface{}) string {
 	keyLower := strings.ToLower(key)
 
 	// Special cases for common HTTP request attributes
-	if keyLower == "http.method" {
+	if keyLower == "http.method" || keyLower == "http.request.method" {
 		if s, ok := value.(string); ok && s != "" {
-			return fmt.Sprintf("http.method == '%s'", s)
+			return fmt.Sprintf("span.attributes[%q] == %q", key, s)
 		}
 	}
-	if keyLower == "http.route" || keyLower == "http.target" {
+	if keyLower == "http.route" || keyLower == "http.target" || keyLower == "http.url" || keyLower == "url.path" {
 		if s, ok := value.(string); ok && s != "" {
-			return fmt.Sprintf("http.route == '%s'", s)
+			return fmt.Sprintf("span.attributes[%q] == %q", key, s)
 		}
 	}
 
@@ -189,15 +198,15 @@ func buildCELExpression(key string, value interface{}) string {
 
 	// Bearer token 检查
 	if isBearerToken(key, value) {
-		return "request.headers.authorization =~ /Bearer .+/"
+		return fmt.Sprintf("span.attributes[%q].matches(\"Bearer .+\")", key)
 	}
 
 	// 字符串非空检查
 	if strVal, ok := value.(string); ok && strVal != "" {
 		if strings.Contains(keyLower, "request") || strings.Contains(keyLower, "body") {
-			return fmt.Sprintf("request.body.%s != \"\"", extractFieldName(key))
+			return fmt.Sprintf("span.attributes[%q] != \"\"", key)
 		} else if strings.Contains(keyLower, "response") {
-			return fmt.Sprintf("response.body.%s != \"\"", extractFieldName(key))
+			return fmt.Sprintf("span.attributes[%q] != \"\"", key)
 		}
 	}
 
@@ -233,7 +242,7 @@ func isBearerToken(key string, value interface{}) bool {
 
 func isRequestAttribute(key string) bool {
 	keyLower := strings.ToLower(key)
-	requestPatterns := []string{"request.", "http.method", "http.url", "http.route", "http.target"}
+	requestPatterns := []string{"request.", "http.method", "http.url", "http.route", "http.target", "url.path"}
 
 	for _, pattern := range requestPatterns {
 		if strings.Contains(keyLower, pattern) {
@@ -245,7 +254,7 @@ func isRequestAttribute(key string) bool {
 
 func isResponseAttribute(key string) bool {
 	keyLower := strings.ToLower(key)
-	responsePatterns := []string{"response.", "http.status_code"}
+	responsePatterns := []string{"response.", "http.status_code", "http.response.status_code"}
 
 	for _, pattern := range responsePatterns {
 		if strings.Contains(keyLower, pattern) {

@@ -97,19 +97,7 @@ func runBaselineRecord(args []string) {
 
 // loadAndValidateFlow loads flow spec and validates it
 func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, error) {
-	if err := spec.ValidateYAMLWithSchemaFS(flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
-		return nil, nil, fmt.Errorf("invalid contract: %w", err)
-	}
-	flow, err := spec.LoadFlowSpec(flowPath)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	_, opIndex, err := flow.BuildOperationIndex(flowPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	issues, err := validate.LintFlow(flowPath, flow, opIndex)
+	flow, opIndex, issues, err := loadContract(flowPath, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -118,6 +106,34 @@ func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string
 			return nil, nil, fmt.Errorf("invalid contract: %s", issue.Msg)
 		}
 	}
-
 	return flow, opIndex, nil
+}
+
+func loadContract(flowPath string, useSchema bool) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, []validate.LintIssue, error) {
+	if useSchema {
+		if err := spec.ValidateYAMLWithSchemaFS(flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
+			return nil, nil, nil, fmt.Errorf("invalid FlowSpec: %w", err)
+		}
+	}
+	flow, err := spec.LoadFlowSpec(flowPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if useSchema {
+		for alias, binding := range flow.Services {
+			if err := spec.ValidateYAMLWithSchemaFS(spec.ResolvePath(flowPath, binding.Spec), schemas.FS, "servicespec.schema.json"); err != nil {
+				return nil, nil, nil, fmt.Errorf("invalid ServiceSpec %s: %w", alias, err)
+			}
+		}
+	}
+
+	_, opIndex, err := flow.BuildOperationIndex(flowPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	issues, err := validate.LintFlow(flowPath, flow, opIndex)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return flow, opIndex, issues, nil
 }

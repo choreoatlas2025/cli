@@ -32,6 +32,8 @@ Relative degradation is `(baselineRate - currentRate) / baselineRate` for a
 positive baseline rate. The additional limits never replace absolute floors.
 All four values must be finite numbers between `0` and `1`. A step-level failure
 still fails runtime validation regardless of these settings.
+HTML displays the configured values, including `0`, without replacing them with
+the default thresholds.
 
 ```bash
 choreoatlas validate \
@@ -90,3 +92,9 @@ Baseline comparison details include `baselineStepsCoverage`, `stepsDeltaAbs`,
 `stepsDeltaPct`, `baselineConditionsRate`, `conditionsDeltaAbs`, and
 `conditionsDeltaPct`. Rate values are fractions between `0` and `1`; relative
 changes can exceed that interval when a rate improves from a small baseline.
+
+HTML inserts external step, condition, message, timeline and policy-violation
+fields as text nodes. Timeline tooltips use the DOM `title` property. These
+fields do not become HTML markup or event handlers. The repository's CI verifies
+this behavior against a Go-generated report in a real browser, together with
+zero-threshold rendering.

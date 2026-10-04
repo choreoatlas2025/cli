@@ -9,9 +9,6 @@ import (
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
-	"github.com/choreoatlas2025/cli/internal/schemas"
-	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
 func runLint(args []string) {
@@ -20,44 +17,12 @@ func runLint(args []string) {
 	useSchema := fs.Bool("schema", true, "Enable JSON Schema strict validation")
 	_ = fs.Parse(args)
 
-	// JSON Schema validation (if enabled)
+	_, _, issues, err := loadContract(*flowPath, *useSchema)
+	if err != nil {
+		exitErr(err)
+	}
 	if *useSchema {
-		// FlowSpec schema validation (using embedded schema for robustness)
-		if err := spec.ValidateYAMLWithSchemaFS(*flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
-			// Fallback to file path method
-			if err := spec.ValidateYAMLWithSchema(*flowPath, "schemas/flowspec.schema.json"); err != nil {
-				exitErr(fmt.Errorf("FlowSpec structure validation failed: %w", err))
-			}
-		}
-		fmt.Println("[SCHEMA] FlowSpec structure validation passed")
-	}
-
-	flow, err := spec.LoadFlowSpec(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-
-	// ServiceSpec schema validation (if enabled)
-	if *useSchema {
-		for alias, bind := range flow.Services {
-			serviceSpecPath := spec.ResolvePath(*flowPath, bind.Spec)
-			// Using embedded schema for robustness
-			if err := spec.ValidateYAMLWithSchemaFS(serviceSpecPath, schemas.FS, "servicespec.schema.json"); err != nil {
-				// Fallback to file path method
-				if err := spec.ValidateYAMLWithSchema(serviceSpecPath, "schemas/servicespec.schema.json"); err != nil {
-					exitErr(fmt.Errorf("ServiceSpec structure validation failed (%s): %w", alias, err))
-				}
-			}
-		}
-		fmt.Println("[SCHEMA] ServiceSpec structure validation passed")
-	}
-	_, opIndex, err := flow.BuildOperationIndex(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-	issues, err := validate.LintFlow(*flowPath, flow, opIndex)
-	if err != nil {
-		exitErr(err)
+		fmt.Println("[SCHEMA] Contract structure validation passed")
 	}
 
 	if len(issues) == 0 {
