@@ -198,10 +198,10 @@ for f in traces/*.json; do ca validate --flow .flowspec.yaml --trace "$f"; done
 ## 🔒 Community Edition (CE) Features
 
 ### Zero Telemetry Guarantee
-- **No Data Collection**: Absolutely no telemetry, analytics, or usage tracking
+- **No Data Collection**: No product usage telemetry, analytics, or usage tracking
 - **Completely Offline**: Works without any network connections
 - **Privacy First**: Your contracts and traces never leave your machine
-- **Verifiable**: Check with `strings choreoatlas | grep telemetry` (returns nothing)
+- **Verifiable**: Audit the runtime source and observe network activity — see [the privacy verification guide](docs/privacy.md#verification-methods).
 
 ## ✨ Core Features
 
@@ -467,19 +467,15 @@ make clean
 └── schemas/                 # JSON Schema definitions
 ```
 
-## 📦 Edition Comparison
+## 📦 Community Edition Scope
 
-| Feature | Community (CE) | Pro-Free | Pro-Privacy | Cloud |
-|---------|---------------|----------|-------------|-------|
-| **Core Validation** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **Discovery (Atlas Scout)** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **HTML/JSON/JUnit Reports** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **Telemetry** | ❌ Never | ⚠️ Optional | ❌ Never | ✅ Required |
-| **OTLP Import** | ❌ | ✅ | ✅ | ✅ |
-| **PII Masking** | ❌ | ❌ | ✅ | ✅ |
-| **Advanced Baseline** | ❌ | ✅ | ✅ | ✅ |
-| **Team Collaboration** | ❌ | ❌ | ❌ | ✅ |
-| **Price** | Free Forever | $19/user/mo | $39/user/mo | Custom |
+This repository is an independent Community Edition, licensed under Apache-2.0.
+The default build provides local dual-contract discovery and validation, temporal
+and causal checks, DAG support, HTML/JSON/JUnit reports, and basic baseline gates.
+All validation inputs and generated reports remain local. Builds and reports
+identify themselves as CE.
+
+See [DECISIONS.md](DECISIONS.md) for the repository's scope and maintenance rules.
 
 ## 📋 System Requirements
 

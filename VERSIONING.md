@@ -61,6 +61,6 @@ The `choreoatlas version` command always shows the `-ce` suffix so operators can
    - `docker run --rm choreoatlas/cli:vX.Y.Z-ce version`
 6. Announce the release (GitHub Release notes, docs updates).
 
-## Future Editions
+## Repository Scope
 
-The `-ce` suffix keeps the namespace open for future commercial or enterprise editions (e.g. `-pro`, `-cloud`). Any new edition must use a distinct suffix and distribution channel so CE users can continue to verify the zero-telemetry guarantee.
+This repository builds and distributes the independent Community Edition. The `-ce` suffix identifies these releases; it does not select a different runtime feature set. See [DECISIONS.md](DECISIONS.md) for the repository's scope and maintenance rules.

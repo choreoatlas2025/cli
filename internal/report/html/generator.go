@@ -16,12 +16,12 @@ var htmlTemplate string
 
 // HTMLData represents the data structure passed to the HTML template
 type HTMLData struct {
-	Summary    CoverageSummary     `json:"summary"`
+	Summary    CoverageSummary       `json:"summary"`
 	Steps      []validate.StepResult `json:"steps"`
-	Spans      []SpanInfo          `json:"spans"`
-	Graph      interface{}         `json:"graph,omitempty"` // For DAG mode
-	GateResult *GateResult         `json:"gateResult,omitempty"`
-	Edition    string              `json:"edition"`         // Edition badge: CE/Pro/Pro Privacy
+	Spans      []SpanInfo            `json:"spans"`
+	Graph      interface{}           `json:"graph,omitempty"` // For DAG mode
+	GateResult *GateResult           `json:"gateResult,omitempty"`
+	Edition    string                `json:"edition"` // Always CE; retained in the report JSON format.
 }
 
 // CoverageSummary represents coverage statistics for HTML display
@@ -30,12 +30,12 @@ type CoverageSummary struct {
 	StepsPass       int     `json:"stepsPass"`
 	StepsFail       int     `json:"stepsFail"`
 	StepsSkip       int     `json:"stepsSkip"`
-	StepsCoverage   float64 `json:"stepsCoverage"`   // stepsPass / stepsTotal
+	StepsCoverage   float64 `json:"stepsCoverage"` // stepsPass / stepsTotal
 	ConditionsTotal int     `json:"conditionsTotal"`
 	ConditionsPass  int     `json:"conditionsPass"`
 	ConditionsFail  int     `json:"conditionsFail"`
 	ConditionsSkip  int     `json:"conditionsSkip"`
-	ConditionsRate  float64 `json:"conditionsRate"`  // conditionsPass / (conditionsPass + conditionsFail)
+	ConditionsRate  float64 `json:"conditionsRate"` // conditionsPass / (conditionsPass + conditionsFail)
 	DurationNanos   int64   `json:"durationNanos"`
 }
 
@@ -56,6 +56,7 @@ type GateResult struct {
 
 // WriteHTMLReport generates and writes an HTML report file
 func WriteHTMLReport(outputPath string, data HTMLData) error {
+	data.Edition = "CE"
 	// Serialize data to JSON
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
@@ -63,7 +64,7 @@ func WriteHTMLReport(outputPath string, data HTMLData) error {
 	}
 
 	// Inject data into template
-	content := fmt.Sprintf(`%s<script>window.FLOWREPORT = %s;</script>`, 
+	content := fmt.Sprintf(`%s<script>window.FLOWREPORT = %s;</script>`,
 		htmlTemplate, string(dataJSON))
 
 	// Write to file
@@ -71,22 +72,22 @@ func WriteHTMLReport(outputPath string, data HTMLData) error {
 }
 
 // BuildHTMLData creates HTMLData from validation results and spans
-func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *GateResult, edition string) HTMLData {
+func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *GateResult) HTMLData {
 	summary := calculateSummary(steps, spans)
-	
+
 	return HTMLData{
 		Summary:    summary,
 		Steps:      steps,
 		Spans:      spans,
 		GateResult: gateResult,
-		Edition:    edition,
+		Edition:    "CE",
 	}
 }
 
 // calculateSummary computes coverage summary from step results
 func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSummary {
 	summary := CoverageSummary{}
-	
+
 	// Count steps
 	summary.StepsTotal = len(steps)
 	for _, step := range steps {
@@ -99,7 +100,7 @@ func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSum
 			summary.StepsSkip++
 		}
 	}
-	
+
 	// Count conditions
 	for _, step := range steps {
 		for _, condition := range step.Conditions {
@@ -114,17 +115,17 @@ func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSum
 			}
 		}
 	}
-	
+
 	// Calculate rates
 	if summary.StepsTotal > 0 {
 		summary.StepsCoverage = float64(summary.StepsPass) / float64(summary.StepsTotal)
 	}
-	
+
 	conditionsEvaluated := summary.ConditionsPass + summary.ConditionsFail
 	if conditionsEvaluated > 0 {
 		summary.ConditionsRate = float64(summary.ConditionsPass) / float64(conditionsEvaluated)
 	}
-	
+
 	// Calculate duration from spans
 	if len(spans) > 0 {
 		var minStart, maxEnd int64
@@ -143,6 +144,6 @@ func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSum
 		}
 		summary.DurationNanos = maxEnd - minStart
 	}
-	
+
 	return summary
 }

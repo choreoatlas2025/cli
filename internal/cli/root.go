@@ -4,14 +4,14 @@
 package cli
 
 import (
-    "flag"
-    "fmt"
-    "os"
-    "runtime"
-    "strings"
+	"flag"
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
 
-    "github.com/choreoatlas2025/cli/internal/cli/exitcode"
-    "github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
+	"github.com/choreoatlas2025/cli/internal/spec"
 )
 
 // Execute runs the CLI command
@@ -36,18 +36,10 @@ func Execute() {
 			case "system":
 				printSystemHelp()
 				return
-			case "workspace":
-				printWorkspaceHelp()
-				return
-			case "platform":
-				printPlatformHelp()
-				return
-			case "plugin":
-				printPluginHelp()
-				return
-			case "config":
-				printConfigHelp()
-				return
+			default:
+				fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", os.Args[2])
+				printHelp()
+				os.Exit(exitcode.CLIError)
 			}
 		}
 		printHelp()
@@ -73,14 +65,6 @@ func Execute() {
 		runSpecGroup(os.Args[2:])
 	case "run":
 		runRunGroup(os.Args[2:])
-	case "workspace":
-		runWorkspaceGroup(os.Args[2:])
-	case "platform":
-		runPlatformGroup(os.Args[2:])
-	case "plugin":
-		runPluginGroup(os.Args[2:])
-	case "config":
-		runConfigGroup(os.Args[2:])
 	case "system":
 		runSystemGroup(os.Args[2:])
 	default:
@@ -100,10 +84,6 @@ Usage:
 Domain commands:
   spec        Flow/Service specifications (discover | lint | validate | convert)
   run         Runtime validation (validate)
-  workspace   Collaboration tooling (not yet available in CE)
-  platform    Deployment & governance (not yet available in CE)
-  plugin      Plugin management (not yet available in CE)
-  config      CLI configuration helpers (not yet available in CE)
   system      System utilities (version)
 
 Top-level aliases:
@@ -212,137 +192,119 @@ Notes:
 `)
 }
 
-func printSystemHelp()    { fmt.Println("system domain (CE): version available; upgrade/doctor/cache not included in CE.") }
-func printWorkspaceHelp() { fmt.Println("workspace domain not available in CE. Use ci-gate for gate workflows.") }
-func printPlatformHelp()  { fmt.Println("platform domain not available in CE build.") }
-func printPluginHelp()    { fmt.Println("plugin domain not available in CE build.") }
-func printConfigHelp()    { fmt.Println("config domain not available in CE. Use --config or CHOREO_* environment variables.") }
+func printSystemHelp() { fmt.Println("Usage: choreoatlas system version") }
 
 // --- Flowspec alias and convert ---
 func runFlowspec(args []string) {
-    if len(args) == 0 {
-        fmt.Println("Usage: choreoatlas flowspec <validate|lint|convert> [options]")
-        return
-    }
-    sub := args[0]
-    rest := []string{}
-    if len(args) > 1 { rest = args[1:] }
-    switch sub {
-    case "validate":
-        runValidate(rest)
-    case "lint":
-        runLint(rest)
-    case "convert":
-        runConvert(rest)
-    default:
-        fmt.Printf("Unknown flowspec subcommand: %s\n", sub)
-    }
+	if len(args) == 0 {
+		fmt.Println("Usage: choreoatlas flowspec <validate|lint|convert> [options]")
+		return
+	}
+	sub := args[0]
+	rest := []string{}
+	if len(args) > 1 {
+		rest = args[1:]
+	}
+	switch sub {
+	case "validate":
+		runValidate(rest)
+	case "lint":
+		runLint(rest)
+	case "convert":
+		runConvert(rest)
+	default:
+		fmt.Printf("Unknown flowspec subcommand: %s\n", sub)
+	}
 }
 
 func runConvert(args []string) {
-    fs := flag.NewFlagSet("flowspec convert", flag.ExitOnError)
-    in := fs.String("in", ".flowspec.yaml", "Input FlowSpec file")
-    out := fs.String("out", "converted.flowspec.yaml", "Output FlowSpec file")
-    to := fs.String("to", "flow", "Target format: flow|graph (only flow supported in CE)")
-    _ = fs.Parse(args)
+	fs := flag.NewFlagSet("flowspec convert", flag.ExitOnError)
+	in := fs.String("in", ".flowspec.yaml", "Input FlowSpec file")
+	out := fs.String("out", "converted.flowspec.yaml", "Output FlowSpec file")
+	to := fs.String("to", "flow", "Target format: flow (graph-to-flow conversion)")
+	_ = fs.Parse(args)
 
-    if *to != "flow" {
-        exitErr(fmt.Errorf("only --to flow is supported currently"))
-    }
-    fspec, err := spec.LoadFlowSpec(*in)
-    if err != nil { exitErr(err) }
-    if !fspec.IsGraphMode() {
-        exitErr(fmt.Errorf("input is not in graph(DAG) format"))
-    }
-    conv := spec.ConvertGraphToFlow(fspec)
-    if err := spec.WriteFlowSpec(*out, conv); err != nil {
-        exitErr(err)
-    }
-    fmt.Printf("Converted graph -> flow: %s\n", *out)
+	if *to != "flow" {
+		exitErr(fmt.Errorf("only --to flow is supported currently"))
+	}
+	fspec, err := spec.LoadFlowSpec(*in)
+	if err != nil {
+		exitErr(err)
+	}
+	if !fspec.IsGraphMode() {
+		exitErr(fmt.Errorf("input is not in graph(DAG) format"))
+	}
+	conv := spec.ConvertGraphToFlow(fspec)
+	if err := spec.WriteFlowSpec(*out, conv); err != nil {
+		exitErr(err)
+	}
+	fmt.Printf("Converted graph -> flow: %s\n", *out)
 }
 
 // --- Domain routers ---
 func runSpecGroup(args []string) {
-    if len(args) == 0 {
-        printSpecHelp()
-        os.Exit(1)
-    }
-    sub := args[0]
-    rest := []string{}
-    if len(args) > 1 { rest = args[1:] }
-    switch sub {
-    case "discover":
-        runDiscover(rest)
-    case "lint":
-        runLint(rest)
-    case "validate":
-        runLint(rest)
-    case "convert":
-        runConvert(rest)
-    default:
-        fmt.Fprintf(os.Stderr, "Unknown spec subcommand: %s\n\n", sub)
-        printSpecHelp()
-        os.Exit(1)
-    }
+	if len(args) == 0 {
+		printSpecHelp()
+		os.Exit(1)
+	}
+	sub := args[0]
+	rest := []string{}
+	if len(args) > 1 {
+		rest = args[1:]
+	}
+	switch sub {
+	case "discover":
+		runDiscover(rest)
+	case "lint":
+		runLint(rest)
+	case "validate":
+		runLint(rest)
+	case "convert":
+		runConvert(rest)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown spec subcommand: %s\n\n", sub)
+		printSpecHelp()
+		os.Exit(1)
+	}
 }
 
 func runRunGroup(args []string) {
-    if len(args) == 0 {
-        printRunHelp()
-        os.Exit(1)
-    }
-    sub := args[0]
-    rest := []string{}
-    if len(args) > 1 { rest = args[1:] }
-    switch sub {
-    case "validate":
-        runValidate(rest)
-    default:
-        fmt.Fprintf(os.Stderr, "Unknown run subcommand: %s\n\n", sub)
-        printRunHelp()
-        os.Exit(1)
-    }
-}
-
-func runWorkspaceGroup(args []string) {
-    _ = args
-    fmt.Fprintln(os.Stderr, "workspace domain is not available in CE yet. Use ci-gate or top-level commands where applicable.")
-    os.Exit(1)
-}
-
-func runPlatformGroup(args []string) {
-    _ = args
-    fmt.Fprintln(os.Stderr, "platform domain is not available in CE.")
-    os.Exit(1)
-}
-
-func runPluginGroup(args []string) {
-    _ = args
-    fmt.Fprintln(os.Stderr, "plugin management is not available in CE.")
-    os.Exit(1)
-}
-
-func runConfigGroup(args []string) {
-    _ = args
-    fmt.Fprintln(os.Stderr, "config commands are not available in CE yet. Configure via --config or CHOREO_* environment variables.")
-    os.Exit(1)
+	if len(args) == 0 {
+		printRunHelp()
+		os.Exit(1)
+	}
+	sub := args[0]
+	rest := []string{}
+	if len(args) > 1 {
+		rest = args[1:]
+	}
+	switch sub {
+	case "validate":
+		runValidate(rest)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown run subcommand: %s\n\n", sub)
+		printRunHelp()
+		os.Exit(1)
+	}
 }
 
 func runSystemGroup(args []string) {
-    if len(args) == 0 {
-        printSystemHelp()
-        os.Exit(1)
-    }
-    sub := args[0]
-    rest := []string{}
-    if len(args) > 1 { rest = args[1:] }
-    switch sub {
-    case "version":
-        runVersion(rest)
-    default:
-        fmt.Fprintf(os.Stderr, "system %s is not implemented in CE\n", sub)
-        os.Exit(1)
-    }
+	if len(args) == 0 {
+		printSystemHelp()
+		os.Exit(1)
+	}
+	sub := args[0]
+	rest := []string{}
+	if len(args) > 1 {
+		rest = args[1:]
+	}
+	switch sub {
+	case "version":
+		runVersion(rest)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown system subcommand: %s\n", sub)
+		os.Exit(1)
+	}
 }
 
 // convertGraphToFlow performs DAG→flow conversion using FlowSpec/GraphSpec types from spec package

@@ -1,140 +1,78 @@
 # Privacy Policy - ChoreoAtlas CE
 
-## Zero Telemetry Commitment
+## Zero Usage Telemetry Commitment
 
-ChoreoAtlas Community Edition (CE) is designed with **absolute privacy** as a core principle. We collect **ZERO** data from CE users.
+ChoreoAtlas Community Edition is an independent, local CLI. It does not collect
+or upload usage statistics, analytics, crash reports, installation counts, or
+user identifiers. It does not check for updates or fetch remote configuration.
 
-## What We DON'T Collect
+All contract validation, trace analysis, baseline comparison, and report
+generation run locally. Contracts, traces, reports, and execution output remain
+under your control.
 
-The CE edition does NOT:
-- ❌ Collect usage statistics
-- ❌ Track command executions
-- ❌ Monitor feature usage
-- ❌ Send crash reports
-- ❌ Phone home for updates
-- ❌ Transmit any data over network
-- ❌ Store user identifiers
-- ❌ Generate anonymous IDs
-- ❌ Log IP addresses
-- ❌ Track installation counts
-
-## What Stays on Your Machine
-
-Everything. All operations are 100% local:
-- ✅ FlowSpec validation
-- ✅ Trace analysis
-- ✅ Report generation
-- ✅ Error messages
-- ✅ Configuration
-- ✅ Execution logs
+OpenTelemetry attributes in traces are business-system inputs supplied by you.
+Processing those attributes locally is separate from collecting product usage
+telemetry. Reports can contain data from your traces; control their storage and
+sharing as you would the original inputs.
 
 ## Network Isolation
 
-ChoreoAtlas CE can operate in completely air-gapped environments:
-- No outbound connections required
-- No update checks
-- No license validation
-- No feature flag fetching
-- No remote configuration
+The CLI's local workflows require no outbound connections, license validation,
+or remote feature configuration. Downloading releases, installing through a
+package manager, and obtaining build dependencies are distribution steps; they
+are separate from running local validation.
 
 ## Verification Methods
 
-### 1. Binary Inspection
+### 1. Source and Build Audit
 
-You can verify our zero-telemetry claim:
+Build the default CE executable without edition tags:
 
 ```bash
-# Search for telemetry-related symbols (should return empty)
-strings choreoatlas | grep -i telemetry
-strings choreoatlas | grep -i analytics
-strings choreoatlas | grep -i tracking
-
-# Check for common telemetry SDKs (should return empty)
-strings choreoatlas | grep -E "segment|mixpanel|amplitude|posthog|sentry"
-
-# Examine network-related imports
+go build -o choreoatlas ./cmd/choreoatlas
+./choreoatlas version
 go version -m choreoatlas
+
+# Review runtime code for network clients and outbound calls.
+rg -n 'net/http|http\.(Get|Post|NewRequest)|net\.Dial' \
+  cmd internal --glob '*.go' --glob '!*_test.go'
 ```
 
-### 2. Network Monitoring
+The repository is public at https://github.com/choreoatlas2025/cli. Review the
+source and dependency graph together. A binary string search for words such as
+`telemetry`, `tracking`, or HTTP URLs does not establish whether the executable
+sends data: those strings can occur in trace fields, schemas, or library code.
 
-Monitor network activity during execution:
+### 2. Runtime Verification
 
-```bash
-# macOS
-sudo tcpdump -i any host github.com or host api.github.com
+Run representative discovery, validation, baseline, and report workflows in an
+environment with outbound networking disabled. They should continue to work
+from local inputs. Network monitoring can supplement that check; observing only
+connections to one hostname or port does not cover all possible destinations.
 
-# Linux
-sudo tcpdump -i any port 443 or port 80
+### 3. Release Verification
 
-# Run ChoreoAtlas (should show no network activity)
-choreoatlas lint --flow examples/flows/order-fulfillment.flowspec.yaml
-```
-
-### 3. Source Code Audit
-
-The source code is fully open:
-- Repository: https://github.com/choreoatlas2025/cli
-- No telemetry dependencies in `go.mod`
-- No analytics code in source
-- No network calls except for standard library
-
-## Comparison with Other Editions
-
-| Feature | CE (Community) | Pro-Free | Pro-Privacy | Cloud |
-|---------|---------------|----------|-------------|-------|
-| Telemetry | ❌ None | ✅ Optional | ❌ None | ✅ Required |
-| Network Calls | ❌ None | ✅ Update checks | ❌ None | ✅ API calls |
-| Data Collection | ❌ Zero | ✅ Anonymous | ❌ Zero | ✅ Account-based |
-| Offline Mode | ✅ Always | ⚠️ Partial | ✅ Always | ❌ Requires connection |
-
-## Build Verification
-
-Our CI/CD pipeline ensures telemetry-free builds:
-
-```yaml
-# Build flags used for CE
-go build -tags ce -ldflags "-X main.Version=vX.Y.Z"
-
-# No telemetry modules included
-# No analytics SDKs linked
-# No tracking code compiled
-```
+Download artifacts from the official release channel, verify their published
+checksums, and review changes between versions. Source builds use the same CE
+scope as distributed executables; an edition build tag is not needed to enable it.
 
 ## Your Rights
 
-With ChoreoAtlas CE, you have the right to:
-- Complete privacy of your validation workflows
-- Full control over your data
-- Audit the source code
-- Build from source
-- Modify and redistribute (per Apache 2.0 license)
-
-## Security Considerations
-
-While we don't collect data, we recommend:
-- Download binaries only from official sources
-- Verify checksums when available
-- Build from source for maximum trust
-- Review code changes between versions
+You can audit the source, build from source, control your local inputs and
+outputs, and modify or redistribute the software under Apache-2.0.
 
 ## Contact
 
 For privacy-related questions:
+
 - Open an issue: https://github.com/choreoatlas2025/cli/issues
 - Email: choreoatlas@gmail.com (public inbox)
 
 ## Commitment
 
-This zero-telemetry commitment is permanent for the CE edition. Any future changes would require:
-1. Major version bump
-2. Clear changelog entry
-3. Updated documentation
-4. Separate edition/binary
+Zero usage telemetry and local execution are part of this repository's scope.
+See [DECISIONS.md](../DECISIONS.md) for its maintenance rules.
 
-We will NEVER silently add telemetry to the CE edition.
+*Last updated: 2026-10-04*
 
----
-
-*Last updated: January 2025*
-*Policy version: 1.0.0*
+*Policy version: 1.1.0*
