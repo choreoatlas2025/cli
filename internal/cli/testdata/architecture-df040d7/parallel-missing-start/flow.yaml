@@ -1,0 +1,25 @@
+{
+  "info": {
+    "title": "Architecture probe"
+  },
+  "services": {
+    "svc": {
+      "spec": "./svc.yaml"
+    }
+  },
+  "flow": [
+    {
+      "step": "Concurrent",
+      "parallel": [
+        {
+          "step": "First",
+          "call": "svc.a"
+        },
+        {
+          "step": "Second",
+          "call": "svc.b"
+        }
+      ]
+    }
+  ]
+}

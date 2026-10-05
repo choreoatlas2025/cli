@@ -141,7 +141,8 @@
               },
               "condition": {
                 "type": "string",
-                "description": "Optional condition for the edge"
+                "maxLength": 0,
+                "description": "CE supports unconditional edges only; nonempty conditions are rejected"
               }
             }
           }

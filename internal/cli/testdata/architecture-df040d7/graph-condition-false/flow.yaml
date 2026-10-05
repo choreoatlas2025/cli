@@ -1,0 +1,29 @@
+{
+  "info": {
+    "title": "Architecture probe"
+  },
+  "services": {
+    "svc": {
+      "spec": "./svc.yaml"
+    }
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "A",
+        "call": "svc.a"
+      },
+      {
+        "id": "B",
+        "call": "svc.b"
+      }
+    ],
+    "edges": [
+      {
+        "from": "A",
+        "to": "B",
+        "condition": "false"
+      }
+    ]
+  }
+}

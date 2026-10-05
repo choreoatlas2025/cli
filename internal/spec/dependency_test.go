@@ -20,7 +20,7 @@ func TestMixedDependencyNormalization(t *testing.T) {
 			t.Fatalf("lost or duplicated dependency: %+v", g.Edges)
 		}
 	}
-	if err := g.ValidateGraphStructure(); err != nil {
-		t.Fatal(err)
+	if err := g.ValidateGraphStructure(); err == nil {
+		t.Fatal("normalization must retain, then reject unsupported conditional content")
 	}
 }

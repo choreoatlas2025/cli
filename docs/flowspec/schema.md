@@ -51,7 +51,7 @@ graph:
 ### Key Features
 - **Nodes**: Each node represents a service operation call
 - **Dependencies**: Use `depends` array to specify node dependencies
-- **Edges**: Normalized as the union of explicit `edges` and all node `depends` entries. Explicit edges never override or disable `depends`. Identical edges are counted once; conditional edge content is retained, while a `depends` entry contributes an unconditional dependency. Structure checks, topological ordering, causality, ancestor output visibility and conversion use this same normalized graph.
+- **Edges**: Normalized as the union of explicit `edges` and all node `depends` entries. Explicit edges never override or disable `depends`. Identical edges are counted once. CE supports unconditional dependencies only: nonempty `condition` fields are rejected rather than executed or ignored. An omitted or empty condition means an unconditional edge. Structure checks, topological ordering, causality, ancestor output visibility and conversion use this same normalized graph.
 - **Variables**: Flow between nodes via `output` and `input` mappings
 
 ### Example

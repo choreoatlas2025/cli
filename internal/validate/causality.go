@@ -43,6 +43,9 @@ type ParallelStep struct {
 
 // BuildCallGraph 从spans构建调用关系图
 func BuildCallGraph(spans []trace.Span) (*CallGraph, error) {
+	if err := trace.ValidateTimestamps(spans, false); err != nil {
+		return nil, err
+	}
 	if _, err := trace.Identify(spans); err != nil {
 		return nil, err
 	}
@@ -53,9 +56,6 @@ func BuildCallGraph(spans []trace.Span) (*CallGraph, error) {
 
 	// 创建节点
 	for _, span := range spans {
-		if span.StartNanos < 0 || span.EndNanos < span.StartNanos {
-			return nil, fmt.Errorf("invalid span time range: %s.%s", span.Service, span.Name)
-		}
 		spanID := getSpanID(span)
 		node := &CallNode{
 			SpanID:     spanID,

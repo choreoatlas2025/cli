@@ -62,8 +62,10 @@ Inputs containing trace IDs must label every span with the same nonempty ID.
 Cross-trace and partially labelled inputs are rejected even in `off` mode, so
 matching cannot assemble a successful path from different labelled requests.
 Unlabelled native JSON remains supported, but its identity is reported as
-`file-only` and cannot establish request membership. Missing end timestamps fail
-timestamp-based validation; negative or inverted time ranges are invalid.
+`file-only` and cannot establish request membership. Missing start or end
+timestamps fail timestamp-based validation; negative or inverted time ranges
+are invalid. Explicit integer zero timestamps remain valid. A Flow with explicit
+`parallel` also requires complete intervals in `off` mode to prove overlap.
 
 ### Concurrency Constraints
 For parallel operations marked as concurrent:

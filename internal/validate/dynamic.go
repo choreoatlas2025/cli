@@ -45,17 +45,22 @@ func ValidateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.
 }
 
 func validateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
-	if GlobalCausalityMode != CausalityOff {
-		for _, span := range tr.Spans {
-			if span.EndNanos == 0 {
-				return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: "span end timestamp is required for causality validation"}}, false
-			}
-		}
+	if err := trace.ValidateTimestamps(tr.Spans, GlobalCausalityMode != CausalityOff || hasParallel(fs.Flow)); err != nil {
+		return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
 	}
 	if fs.IsGraphMode() {
 		return validateGraphAgainstTrace(fs, opIndex, tr)
 	}
 	return validateWithCausality(fs, opIndex, tr)
+}
+
+func hasParallel(steps []spec.FlowStep) bool {
+	for _, step := range steps {
+		if len(step.Parallel) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // validateWithCausality 使用因果校验（支持并发）
@@ -106,6 +111,9 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 
 // validateGraphAgainstTrace validates DAG format against trace data
 func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
+	if err := fs.Graph.ValidateGraphStructure(); err != nil {
+		return []StepResult{{Step: "graph-structure", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
+	}
 	var results []StepResult
 	okAll := true
 

@@ -71,14 +71,25 @@ also return `2`.
 In `temporal` mode, each declared predecessor must complete before the next step
 starts, within the configured tolerance. A step after a parallel group waits for
 every member. `strict` instead verifies direct parent-child nesting and its time
-bounds. Timestamp-based validation requires end timestamps. `off` explicitly
-disables these timing dependencies.
+bounds. Both `startNanos` and `endNanos` must be present for either timing mode.
+An explicit integer `0` is a valid timestamp; an omitted field is not epoch
+evidence. Null, noninteger and out-of-range timestamp fields are input errors
+(`2`). Missing required fields, negative times and reversed intervals fail
+validation (`3`), and cannot be recorded as a successful baseline.
+
+`off` disables causality dependencies and permits serial matching without time
+fields. It does not disable a Flow's explicit `parallel` overlap requirement:
+such flows still require complete, valid interval evidence. DAG independent
+nodes do not imply that their calls must overlap.
 
 DAG dependencies combine node `depends` and explicit `edges`. Supplying any
 explicit edges never disables another node's `depends` constraints. Duplicate
 identical edges are normalized before checks; missing references and cycles in
 the combined graph are input errors. Runtime matching and output visibility use
-the same combined graph as lint and conversion.
+the same combined graph as lint and conversion. CE supports unconditional edges
+only. A nonempty `edge.condition` is an input error (`2`), including with
+`lint --schema=false`, `--semantic=false`, or `--causality off`. An omitted or
+empty condition means an unconditional edge.
 
 ## Exit Codes
 

@@ -1,0 +1,22 @@
+{
+  "spans": [
+    {
+      "service": "svc",
+      "name": "a",
+      "endNanos": 1100000000,
+      "attributes": {
+        "response.status": 200
+      },
+      "startNanos": 0
+    },
+    {
+      "service": "svc",
+      "name": "b",
+      "endNanos": 2100000000,
+      "attributes": {
+        "response.status": 200
+      },
+      "startNanos": 0
+    }
+  ]
+}

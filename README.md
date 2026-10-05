@@ -102,6 +102,16 @@ choreoatlas validate --trace traces/successful-order.trace.json
 - Pass `--trace your-trace.json` to bootstrap from an existing trace.
 - Use `--ci minimal|combo` to inject `.github/workflows/choreoatlas.yml`.
 
+`init` renders the complete set before replacing files. Both FlowSpec copies,
+ServiceSpecs and references pass the same schema/lint checks as normal input;
+native trace samples and workflow YAML are parsed before commit. These checks
+do not prove business rules or that a generated workflow has run successfully.
+Quoted and multiline titles are serialized as YAML. Conflicts without `--force`
+leave existing files intact. With `--force`, ordinary commit failures roll back
+the entire set, including selected examples and workflows; this is not a
+cross-directory crash transaction. Trace mode parses and copies the same
+captured bytes and requires complete timestamps for ordering.
+
 ### Basic Usage
 
 ```bash

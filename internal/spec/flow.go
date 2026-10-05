@@ -61,7 +61,7 @@ type GraphNode struct {
 type GraphEdge struct {
 	From      string `yaml:"from"`
 	To        string `yaml:"to"`
-	Condition string `yaml:"condition,omitempty"` // Optional condition for the edge
+	Condition string `yaml:"condition,omitempty"` // Nonempty conditions are unsupported in CE.
 }
 
 // LoadFlowSpec loads flow specification from file
@@ -92,6 +92,9 @@ func ParseFlowSpec(b []byte) (*FlowSpec, error) {
 	// If using graph format, ensure edges are built
 	if fs.Graph != nil {
 		fs.Graph.EnsureEdges()
+		if err := fs.Graph.validateEdgeConditions(); err != nil {
+			return nil, err
+		}
 	}
 
 	return &fs, nil
@@ -173,6 +176,9 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 
 	// Ensure edges are built from depends field
 	gs.EnsureEdges()
+	if err := gs.validateEdgeConditions(); err != nil {
+		return err
+	}
 
 	// Build node ID set
 	nodeIDs := make(map[string]bool)
@@ -206,6 +212,15 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 		return err
 	}
 
+	return nil
+}
+
+func (gs *GraphSpec) validateEdgeConditions() error {
+	for _, edge := range gs.Edges {
+		if edge.Condition != "" {
+			return fmt.Errorf("invalid contract: unsupported conditional edge %s -> %s: CE supports unconditional dependencies only", edge.From, edge.To)
+		}
+	}
 	return nil
 }
 
