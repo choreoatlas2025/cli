@@ -1,0 +1,23 @@
+{
+  "info": {
+    "title": "Exact numeric identity"
+  },
+  "services": {
+    "svc": {
+      "spec": "./svc.yaml"
+    }
+  },
+  "flow": [
+    {
+      "step": "Create",
+      "call": "svc.a",
+      "output": {
+        "identifier": "response.body.id"
+      }
+    },
+    {
+      "step": "Use",
+      "call": "svc.b"
+    }
+  ]
+}

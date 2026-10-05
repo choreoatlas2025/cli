@@ -3,8 +3,10 @@
 package trace
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -33,8 +35,22 @@ func LoadFromFile(path string) (*Trace, error) {
 
 func Parse(tb []byte) (*Trace, error) {
 	var tr Trace
-	if err := json.Unmarshal(tb, &tr); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(tb))
+	decoder.UseNumber()
+	if err := decoder.Decode(&tr); err != nil {
 		return nil, fmt.Errorf("failed to parse trace data: %w", err)
+	}
+	// Keep json.Unmarshal's single-document requirement.
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("multiple JSON values")
+		}
+		return nil, fmt.Errorf("failed to parse trace data: %w", err)
+	}
+	for i := range tr.Spans {
+		if _, err := normalizeNumbers(tr.Spans[i].Attributes); err != nil {
+			return nil, fmt.Errorf("invalid trace span %d attributes: %w", i, err)
+		}
 	}
 	return &tr, nil
 }

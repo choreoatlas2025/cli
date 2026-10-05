@@ -58,11 +58,27 @@ inputs, and malformed identity attributes fail validation, including in `off`
 mode. Inputs with no trace IDs remain supported and reports mark their identity
 as `file-only`; a file hash does not prove that all spans came from one request.
 
+Native JSON integer attributes retain exact signed 64-bit values, or unsigned
+64-bit values for positive integers above the signed maximum. Nested objects,
+lists, CEL outputs, input references and text interpolation retain these values;
+adjacent integer IDs above `2^53` do not become equal. Integers outside these
+ranges are input errors (`2`). Decimal/exponent spellings retain `double`
+arithmetic semantics. They use finite IEEE-754 binary64 approximation for
+fractions, but integral values which would be rounded are rejected; use an
+integer literal for exact integer identity. Overflow and nonzero underflow
+also return `2`.
+
 In `temporal` mode, each declared predecessor must complete before the next step
 starts, within the configured tolerance. A step after a parallel group waits for
 every member. `strict` instead verifies direct parent-child nesting and its time
 bounds. Timestamp-based validation requires end timestamps. `off` explicitly
 disables these timing dependencies.
+
+DAG dependencies combine node `depends` and explicit `edges`. Supplying any
+explicit edges never disables another node's `depends` constraints. Duplicate
+identical edges are normalized before checks; missing references and cycles in
+the combined graph are input errors. Runtime matching and output visibility use
+the same combined graph as lint and conversion.
 
 ## Exit Codes
 

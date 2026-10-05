@@ -209,30 +209,30 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 	return nil
 }
 
-// buildEdgesFromDepends converts node depends fields to edges
-func (gs *GraphSpec) buildEdgesFromDepends() {
-	// Clear existing edges if any
-	gs.Edges = []GraphEdge{}
-
-	// Build edges from depends field
-	for _, node := range gs.Nodes {
-		for _, dep := range node.Depends {
-			gs.Edges = append(gs.Edges, GraphEdge{
-				From: dep,
-				To:   node.ID,
-			})
-		}
-	}
-}
-
-// EnsureEdges builds edges from node.depends if not already done
+// EnsureEdges normalizes the union of explicit edges and node.depends.
+// Identical edges are deduplicated; conditional edges retain their conditions,
+// and a depends entry always contributes an unconditional dependency.
 func (gs *GraphSpec) EnsureEdges() {
 	if gs == nil || gs.ensured {
 		return
 	}
-	if len(gs.Edges) == 0 {
-		gs.buildEdgesFromDepends()
+	edges := make([]GraphEdge, 0, len(gs.Edges))
+	seen := map[GraphEdge]bool{}
+	add := func(edge GraphEdge) {
+		if !seen[edge] {
+			seen[edge] = true
+			edges = append(edges, edge)
+		}
 	}
+	for _, edge := range gs.Edges {
+		add(edge)
+	}
+	for _, node := range gs.Nodes {
+		for _, predecessor := range node.Depends {
+			add(GraphEdge{From: predecessor, To: node.ID})
+		}
+	}
+	gs.Edges = edges
 	gs.ensured = true
 }
 
