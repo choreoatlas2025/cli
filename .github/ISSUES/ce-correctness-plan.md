@@ -73,3 +73,5 @@
 新增运行边界：初始外部变量没有注入入口，读取未绑定值时为 CEL 错误；未使用的输入不阻止独立响应断言。--semantic=false 同时跳过断言和输出求值。发现生成的观察条件仍须人工确认，不能推断业务不变量。
 
 本轮本地验收（2026-10-04）：完整 `go test ./...`、`go test -race ./...`、`go vet ./...` 通过；固定 golangci-lint v2.14.0 为 0 issues；原生构建成功，编译后的实际 CLI 通过全部 `TestCorrectness`、`TestRecheck`、`TestRound3` 回归。Go 生成的攻击报告通过本地 Chromium 检查。仓库 CI 新增 TestRound3 二进制回归及同产物的浏览器检查；远端结果仍须按最终提交 SHA 核验。
+
+首次远端执行 `5851c20` 的 lint、完整测试与实际 CLI 回归通过，浏览器检查在完整 Chrome 的 DOM 捕获环节超时，未产生断言结果，构建因此被阻止。本地完整 Chrome 同样复现，添加捕获超时参数后仍超时。CI 改用 Google 官方 Chrome for Testing 的固定版本 headless shell，与已通过的本地测试使用相同浏览器类型；保留捕获及进程时限，页面或检查脚本未完成仍须失败，不能把超时当作通过。

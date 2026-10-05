@@ -44,14 +44,17 @@ jobs:
       with:
         node-version: '22'
 
-    - uses: browser-actions/setup-chrome@v2
-      id: chrome
-      with:
-        chrome-version: stable
+    - name: Install Chrome headless shell
+      run: |
+        curl --fail --location --retry 3 \
+          https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/linux64/chrome-headless-shell-linux64.zip \
+          --output "$RUNNER_TEMP/ce-chrome.zip"
+        unzip -q "$RUNNER_TEMP/ce-chrome.zip" -d "$RUNNER_TEMP/ce-chrome"
+        chmod +x "$RUNNER_TEMP/ce-chrome/chrome-headless-shell-linux64/chrome-headless-shell"
 
     - name: Check HTML report in a real browser
       env:
-        CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        CHROME_PATH: ${{ runner.temp }}/ce-chrome/chrome-headless-shell-linux64/chrome-headless-shell
         CHOREOATLAS_HTML_FIXTURE: ${{ runner.temp }}/ce-report-fixture.html
       run: |
         go test ./internal/report/html -run '^TestHTMLUntrustedFieldsFixture$' -count=1

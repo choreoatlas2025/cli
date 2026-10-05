@@ -30,7 +30,8 @@ try {
   </script>`;
   const fixture = path.join(dir, 'checked.html');
   fs.writeFileSync(fixture, fs.readFileSync(report, 'utf8') + checks);
-  const dom = execFileSync(browser, ['--headless', '--no-sandbox', '--disable-background-networking', '--disable-extensions', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(dir, 'profile'), '--dump-dom', '--virtual-time-budget=1000', pathToFileURL(fixture).href], { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Bound the browser's capture wait independently of the process lifetime.
+  const dom = execFileSync(browser, ['--headless', '--no-sandbox', '--disable-background-networking', '--disable-extensions', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(dir, 'profile'), '--dump-dom', '--timeout=10000', '--virtual-time-budget=1000', pathToFileURL(fixture).href], { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   const match = dom.match(/<pre id="ce-browser-result">([^<]*)<\/pre>/);
   if (!match) throw new Error('browser did not complete report checks');
   const result = JSON.parse(match[1]);
