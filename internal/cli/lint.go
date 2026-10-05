@@ -9,16 +9,28 @@ import (
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
+	"github.com/choreoatlas2025/cli/internal/input"
+	"github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
 func runLint(args []string) {
 	fs := flag.NewFlagSet("lint", flag.ExitOnError)
 	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
 	useSchema := fs.Bool("schema", true, "Enable JSON Schema strict validation")
+	limits := resourceFlags(fs)
 	_ = fs.Parse(args)
+	if err := checkResourceFlags(*limits); err != nil {
+		exitErr(err)
+	}
 
-	_, issues, err := loadContract(*flowPath, *useSchema)
+	contract, issues, err := loadContractWithFiles(*flowPath, *useSchema, input.NewSnapshotWithLimit(nil, limits.MaxInputBytes))
 	if err != nil {
+		exitErr(err)
+	}
+	config := spec.DefaultValidationConfig()
+	config.Limits = *limits
+	if _, err := validate.CompilePlan(contract.Flow, contract.Operations, config); err != nil {
 		exitErr(err)
 	}
 	if *useSchema {

@@ -44,3 +44,55 @@ func TestSnapshotRetainsReadError(t *testing.T) {
 		t.Fatalf("failed input retried %d times", reads)
 	}
 }
+
+func TestSnapshotInputBudgets(t *testing.T) {
+	dir := t.TempDir()
+	s := NewSnapshotWithLimit(func(string) ([]byte, error) { return []byte("123456789"), nil }, 10)
+	for _, name := range []string{"one", "two"} {
+		if _, err := s.Read(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Read(filepath.Join(dir, "three")); err == nil {
+		t.Fatal("aggregate cap ignored")
+	}
+	if _, err := s.HashExecutable(filepath.Join(dir, "tool")); err != nil {
+		t.Fatal("tool charged to customer input budget", err)
+	}
+	s = NewSnapshotWithLimit(func(string) ([]byte, error) { return []byte("12345678901"), nil }, 10)
+	if _, err := s.Read(filepath.Join(dir, "big")); err == nil {
+		t.Fatal("file cap ignored")
+	}
+	path := filepath.Join(dir, "file")
+	if err := os.WriteFile(path, []byte("12345678901"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadFileLimited(path, 10); err == nil {
+		t.Fatal("native reader ignored cap")
+	}
+}
+
+func TestExecutableHashStreamAndCapture(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tool")
+	if err := os.WriteFile(path, []byte("original executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewSnapshotWithLimit(nil, 1)
+	hash, err := s.HashExecutable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash != HashBytes([]byte("original executable")) {
+		t.Fatal("stream digest differs")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.HashExecutable(path)
+	if err != nil || again != hash {
+		t.Fatal("tool identity reread", err)
+	}
+	if len(s.files) != 0 || s.totalBytes != 0 {
+		t.Fatal("executable consumed customer input budget")
+	}
+}

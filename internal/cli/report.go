@@ -6,11 +6,11 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/choreoatlas2025/cli/internal/fileio"
 	"strings"
-	"time"
 
 	"github.com/choreoatlas2025/cli/internal/report/html"
+	"github.com/choreoatlas2025/cli/internal/result"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
@@ -25,7 +25,7 @@ const (
 )
 
 // WriteReport 生成结构化报告
-func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
+func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult, spans []trace.Span, gateResult *result.GateResult, inputs ...*result.InputBinding) error {
 	switch fmtType {
 	case ReportJSON:
 		return writeJSONReport(path, steps, gateResult, inputs...)
@@ -39,104 +39,29 @@ func WriteReport(path string, fmtType ReportFormat, steps []validate.StepResult,
 }
 
 // CoverageSummary 覆盖度总结
-type CoverageSummary struct {
-	StepsTotal      int            `json:"stepsTotal"`
-	StepsPass       int            `json:"stepsPass"`
-	StepsFail       int            `json:"stepsFail"`
-	StepsSkip       int            `json:"stepsSkip"`
-	ConditionsTotal int            `json:"conditionsTotal"`
-	ConditionsPass  int            `json:"conditionsPass"`
-	ConditionsFail  int            `json:"conditionsFail"`
-	ConditionsSkip  int            `json:"conditionsSkip"`
-	UncoveredSteps  []string       `json:"uncoveredSteps"`
-	CoverageRate    float64        `json:"coverageRate"`
-	ServiceCoverage map[string]int `json:"serviceCoverage"`
-	// Baseline comparison fields
-	BaselineStepsCoverage  float64 `json:"baselineStepsCoverage,omitempty"`
-	StepsDeltaAbs          float64 `json:"stepsDeltaAbs,omitempty"`
-	StepsDeltaPct          float64 `json:"stepsDeltaPct,omitempty"`
-	BaselineConditionsRate float64 `json:"baselineConditionsRate,omitempty"`
-	ConditionsDeltaAbs     float64 `json:"conditionsDeltaAbs,omitempty"`
-	ConditionsDeltaPct     float64 `json:"conditionsDeltaPct,omitempty"`
-}
+type CoverageSummary = result.CoverageSummary
 
 // writeJSONReport 写入 JSON 格式报告
-func writeJSONReport(path string, steps []validate.StepResult, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
-	summary := calculateCoverageSummary(steps)
-
-	// Add baseline comparison fields if available
-	if gateResult != nil && gateResult.Details != nil {
-		if val, ok := gateResult.Details["baselineStepsCoverage"].(float64); ok {
-			summary.BaselineStepsCoverage = val
-		}
-		if val, ok := gateResult.Details["stepsDeltaAbs"].(float64); ok {
-			summary.StepsDeltaAbs = val
-		}
-		if val, ok := gateResult.Details["stepsDeltaPct"].(float64); ok {
-			summary.StepsDeltaPct = val
-		}
-		if val, ok := gateResult.Details["baselineConditionsRate"].(float64); ok {
-			summary.BaselineConditionsRate = val
-		}
-		if val, ok := gateResult.Details["conditionsDeltaAbs"].(float64); ok {
-			summary.ConditionsDeltaAbs = val
-		}
-		if val, ok := gateResult.Details["conditionsDeltaPct"].(float64); ok {
-			summary.ConditionsDeltaPct = val
-		}
-	}
-
-	report := struct {
-		validate.Outcome
-		ExitCode    int                   `json:"exitCode"`
-		Inputs      *html.InputBinding    `json:"inputs,omitempty"`
-		Timestamp   time.Time             `json:"timestamp"`
-		TotalSteps  int                   `json:"totalSteps"`
-		PassedSteps int                   `json:"passedSteps"`
-		FailedSteps int                   `json:"failedSteps"`
-		Steps       []validate.StepResult `json:"steps"`
-		Summary     CoverageSummary       `json:"summary"`
-		GateResult  *html.GateResult      `json:"gateResult,omitempty"`
-	}{
-		Outcome:     reportOutcome(steps, gateResult),
-		ExitCode:    outcomeExitCode(reportOutcome(steps, gateResult)),
-		Timestamp:   time.Now(),
-		TotalSteps:  len(steps),
-		PassedSteps: 0,
-		FailedSteps: 0,
-		Steps:       steps,
-		Summary:     summary,
-		GateResult:  gateResult,
-	}
+func writeJSONReport(path string, steps []validate.StepResult, gateResult *result.GateResult, inputs ...*result.InputBinding) error {
+	var binding *result.InputBinding
 	if len(inputs) > 0 {
-		report.Inputs = inputs[0]
+		binding = inputs[0]
 	}
-
-	for _, s := range steps {
-		if validate.StepPassed(s) {
-			report.PassedSteps++
-		} else {
-			report.FailedSteps++
-		}
-	}
+	report := result.New(steps, gateResult, binding)
 
 	b, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to serialize JSON report: %w", err)
 	}
 
-	return os.WriteFile(path, b, 0644)
+	return fileio.WriteFile(path, b, 0644)
 }
 
 // writeJUnitReport 写入 JUnit XML 格式报告
-func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
+func writeJUnitReport(path string, steps []validate.StepResult, gateResult *result.GateResult, inputs ...*result.InputBinding) error {
 	var sb strings.Builder
-	fails := 0
-	for _, s := range steps {
-		if !validate.StepPassed(s) {
-			fails++
-		}
-	}
+	report := result.New(steps, gateResult, nil)
+	fails := report.FailedSteps
 	gateFailed := gateResult != nil && gateResult.Checked && !gateResult.Passed
 	tests := len(steps)
 	if len(steps) == 0 {
@@ -148,7 +73,7 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 		tests++
 	}
 
-	summary := calculateCoverageSummary(steps)
+	summary := report.Summary
 
 	// JUnit XML header
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
@@ -165,7 +90,7 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 		}
 		fmt.Fprintf(&sb, "    <property name=\"result.inputs\" value=\"%s\"/>\n", xmlEscape(string(binding)))
 	}
-	fmt.Fprintf(&sb, "    <property name=\"result.exitCode\" value=\"%d\"/>\n", outcomeExitCode(reportOutcome(steps, gateResult)))
+	fmt.Fprintf(&sb, "    <property name=\"result.exitCode\" value=\"%d\"/>\n", report.ExitCode)
 	fmt.Fprintf(&sb, `    <property name="coverage.stepsTotal" value="%d"/>`, summary.StepsTotal)
 	sb.WriteString("\n")
 	fmt.Fprintf(&sb, `    <property name="coverage.stepsPass" value="%d"/>`, summary.StepsPass)
@@ -255,11 +180,11 @@ func writeJUnitReport(path string, steps []validate.StepResult, gateResult *html
 	sb.WriteString("</testsuite>")
 	sb.WriteString("\n")
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	return fileio.WriteFile(path, []byte(sb.String()), 0644)
 }
 
 // writeHTMLReport 写入 HTML 格式报告
-func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Span, gateResult *html.GateResult, inputs ...*html.InputBinding) error {
+func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Span, gateResult *result.GateResult, inputs ...*result.InputBinding) error {
 	// Convert trace spans to HTML span info
 	var spanInfos []html.SpanInfo
 	for _, span := range spans {
@@ -273,7 +198,7 @@ func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Spa
 
 	// Build HTML data with gate result and CE edition
 	data := html.BuildHTMLData(steps, spanInfos, gateResult)
-	data.ExitCode = outcomeExitCode(reportOutcome(steps, gateResult))
+
 	if len(inputs) > 0 {
 		data.Inputs = inputs[0]
 	}
@@ -284,53 +209,7 @@ func writeHTMLReport(path string, steps []validate.StepResult, spans []trace.Spa
 
 // calculateCoverageSummary 计算覆盖度总结
 func calculateCoverageSummary(steps []validate.StepResult) CoverageSummary {
-	summary := CoverageSummary{
-		ServiceCoverage: make(map[string]int),
-		UncoveredSteps:  []string{},
-	}
-
-	for _, step := range steps {
-		summary.StepsTotal++
-
-		switch step.Status {
-		case "PASS":
-			summary.StepsPass++
-		case "FAIL":
-			summary.StepsFail++
-			summary.UncoveredSteps = append(summary.UncoveredSteps, step.Step)
-		case "SKIP":
-			summary.StepsSkip++
-		}
-
-		// 统计服务覆盖度
-		if step.Call != "" {
-			parts := strings.Split(step.Call, ".")
-			if len(parts) >= 2 {
-				service := parts[0]
-				summary.ServiceCoverage[service]++
-			}
-		}
-
-		// 统计条件覆盖度
-		for _, condition := range step.Conditions {
-			summary.ConditionsTotal++
-			switch condition.Status {
-			case "PASS":
-				summary.ConditionsPass++
-			case "FAIL":
-				summary.ConditionsFail++
-			case "SKIP":
-				summary.ConditionsSkip++
-			}
-		}
-	}
-
-	// 计算覆盖率
-	if summary.StepsTotal > 0 {
-		summary.CoverageRate = float64(summary.StepsPass) / float64(summary.StepsTotal) * 100
-	}
-
-	return summary
+	return result.Measure(steps)
 }
 
 // xmlEscape 转义 XML 特殊字符

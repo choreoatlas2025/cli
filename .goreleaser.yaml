@@ -16,9 +16,14 @@ builds:
     ldflags:
       - -s -w
       - -X 'github.com/choreoatlas2025/cli/internal/cli.Version={{.Version}}'
-      - -X 'github.com/choreoatlas2025/cli/internal/cli.GitCommit={{.ShortCommit}}'
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.GitCommit={{.FullCommit}}'
       - -X 'github.com/choreoatlas2025/cli/internal/cli.BuildTime={{.Date}}'
       - -X 'github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce'
+      - -X 'github.com/choreoatlas2025/cli/internal/cli.BuildChannel=goreleaser'
+    hooks:
+      post:
+        - cmd: python3 scripts/build-manifest.py --binary "{{ .Path }}" --commit "{{ .FullCommit }}" --channel goreleaser --version "{{ .Version }}" --out "dist/manifest_{{ .Os }}_{{ .Arch }}.json" --qualification "{{ if index .Env "QUALIFICATION_FILE" }}{{ index .Env "QUALIFICATION_FILE" }}{{ end }}" --snapshot={{ .IsSnapshot }}
+          output: true
     goos:
       - linux
       - darwin
@@ -32,8 +37,14 @@ builds:
 
 archives:
   - id: ce-archive
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     files:
+      - src: dist/manifest_{{ .Os }}_{{ .Arch }}.json
+        dst: release-manifest.json
+      - scripts/build-manifest.py
       - README.md
       - LICENSE
       - examples/**/*
@@ -180,6 +191,8 @@ release:
   github:
     owner: choreoatlas2025
     name: cli
+  extra_files:
+    - glob: dist/manifest_*.json
   draft: false
   prerelease: auto
   name_template: "ChoreoAtlas CLI {{ .Version }}"

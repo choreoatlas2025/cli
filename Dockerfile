@@ -16,9 +16,15 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Metadata is supplied by the caller; reject abbreviated or missing revisions.
+ARG GIT_COMMIT
+ARG VERSION=docker-ce
+RUN test "${#GIT_COMMIT}" -eq 40 && \
+    test "$GIT_COMMIT" = "$(git rev-parse HEAD)"
+
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X 'github.com/choreoatlas2025/cli/internal/cli.Version=docker' -X 'github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce'" \
+    -ldflags="-s -w -X 'github.com/choreoatlas2025/cli/internal/cli.Version=${VERSION}' -X 'github.com/choreoatlas2025/cli/internal/cli.BuildEdition=ce' -X 'github.com/choreoatlas2025/cli/internal/cli.GitCommit=${GIT_COMMIT}' -X 'github.com/choreoatlas2025/cli/internal/cli.BuildChannel=docker'" \
     -o choreoatlas ./cmd/choreoatlas
 
 # Final stage using distroless

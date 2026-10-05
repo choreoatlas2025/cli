@@ -14,10 +14,6 @@ import (
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
-func loadContract(flowPath string, useSchema bool) (*spec.ContractSnapshot, []validate.LintIssue, error) {
-	return loadContractWithFiles(flowPath, useSchema, input.NewSnapshot(nil))
-}
-
 func loadContractWithFiles(flowPath string, useSchema bool, files *input.Snapshot) (*spec.ContractSnapshot, []validate.LintIssue, error) {
 	var schemaFS fs.FS
 	if useSchema {
@@ -32,11 +28,15 @@ func loadContractWithFiles(flowPath string, useSchema bool, files *input.Snapsho
 }
 
 func loadTraceSnapshot(path string, files *input.Snapshot) (*trace.Trace, string, error) {
+	return loadTraceWithLimits(path, files, input.Limits{}.Normalized())
+}
+
+func loadTraceWithLimits(path string, files *input.Snapshot, limits input.Limits) (*trace.Trace, string, error) {
 	file, err := files.Read(path)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read trace file: %w", err)
 	}
-	tr, err := trace.Parse(file.Bytes())
+	tr, err := trace.ParseWithMaxSpans(file.Bytes(), limits.Normalized().MaxSpans)
 	if err != nil {
 		return nil, "", err
 	}

@@ -6,6 +6,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/fileio"
 	"os"
 	"path/filepath"
 )
@@ -98,24 +99,5 @@ func commitGeneratedFiles(files []generatedFile, rename func(string, string) err
 }
 
 func stageGeneratedFile(path string, data []byte, mode os.FileMode) (string, error) {
-	file, err := os.CreateTemp(filepath.Dir(path), ".choreoatlas-stage-*")
-	if err != nil {
-		return "", err
-	}
-	name := file.Name()
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		_ = os.Remove(name)
-		return "", err
-	}
-	if err := file.Chmod(mode); err != nil {
-		_ = file.Close()
-		_ = os.Remove(name)
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(name)
-		return "", err
-	}
-	return name, nil
+	return fileio.Stage(path, data, mode)
 }

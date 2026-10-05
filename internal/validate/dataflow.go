@@ -86,7 +86,15 @@ func resolveInput(input any, vars map[string]any) any {
 	}
 }
 
-func nativeValue(value ref.Val) (any, error) {
+func (e *evaluation) nativeValue(value ref.Val) (any, error) {
+	if err := e.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if e.cost >= e.plan.config.Limits.MaxCELCost {
+		e.cancel()
+		return nil, fmt.Errorf("output materialization cost limit exceeded")
+	}
+	e.cost++
 	switch current := value.(type) {
 	case traits.Mapper:
 		result := map[string]any{}
@@ -97,7 +105,7 @@ func nativeValue(value ref.Val) (any, error) {
 			if !ok {
 				return nil, fmt.Errorf("output maps require string keys")
 			}
-			child, err := nativeValue(current.Get(key))
+			child, err := e.nativeValue(current.Get(key))
 			if err != nil {
 				return nil, err
 			}
@@ -108,7 +116,7 @@ func nativeValue(value ref.Val) (any, error) {
 		result := []any{}
 		iterator := current.Iterator()
 		for iterator.HasNext() == types.True {
-			child, err := nativeValue(iterator.Next())
+			child, err := e.nativeValue(iterator.Next())
 			if err != nil {
 				return nil, err
 			}
@@ -123,14 +131,14 @@ func nativeValue(value ref.Val) (any, error) {
 	}
 }
 
-func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops map[string]map[string]spec.ServiceOperation, vars map[string]any) (StepResult, map[string]any) {
-	if result.Status != "PASS" || !EnableSemantic {
+func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops map[string]map[string]spec.ServiceOperation, vars map[string]any, config spec.ValidationConfig, eval *evaluation) (StepResult, map[string]any) {
+	if result.Status != "PASS" || !config.Semantic {
 		return result, nil
 	}
 	svc, operation, _ := splitCall(step.Call)
 	if op, exists := ops[svc][operation]; exists {
 		var passed bool
-		result.Conditions, passed = EvaluateConditions(step, op, span, vars)
+		result.Conditions, passed = eval.conditions(step, op, span, vars)
 		if !passed {
 			result.Status, result.Message = "FAIL", "semantic validation failed"
 			return result, nil
@@ -148,9 +156,9 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		value, phase, err := evalCELValue(step.Output[name], env)
+		value, phase, err := eval.value(step.Output[name], env)
 		if err == nil {
-			exports[name], err = nativeValue(value)
+			exports[name], err = eval.nativeValue(value)
 		}
 		if err != nil {
 			result.Status, result.Message = "FAIL", fmt.Sprintf("output %s evaluation failed (%s): %v", name, phase, err)
@@ -160,10 +168,13 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 	return result, exports
 }
 
-func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]spec.ServiceOperation) []StepResult {
+func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]spec.ServiceOperation, config spec.ValidationConfig, eval *evaluation) []StepResult {
 	var results []StepResult
 	vars := map[string]any{}
 	for begin := 0; begin < len(matches); {
+		if eval.ctx.Err() != nil {
+			return results
+		}
 		end := begin + 1
 		for end < len(matches) && matches[end].stage == matches[begin].stage {
 			end++
@@ -177,7 +188,7 @@ func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]sp
 			if match.node != nil {
 				node := match.node
 				span := trace.Span{Service: node.Service, Name: node.Operation, StartNanos: node.StartNanos, EndNanos: node.EndNanos, Attributes: node.Attributes}
-				result, produced = evaluateStep(result, match.step, span, ops, vars)
+				result, produced = evaluateStep(result, match.step, span, ops, vars, config, eval)
 			}
 			group[i-begin] = result
 			for name, value := range produced {

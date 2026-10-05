@@ -7,9 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
 
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
@@ -101,39 +99,8 @@ func normalizeExpr(e string) string {
 	})
 }
 
-func evalCELValue(expr string, envVars map[string]any) (ref.Val, string, error) {
-	e := normalizeExpr(expr)
-
-	// 使用新版 CEL API 创建环境
-	celEnv, err := cel.NewEnv(
-		cel.Variable("request", cel.DynType),
-		cel.Variable("response", cel.DynType),
-		cel.Variable("span", cel.DynType),
-		cel.Variable("vars", cel.DynType),
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("create cel env: %w", err)
-	}
-
-	ast, issues := celEnv.Compile(e)
-	if issues != nil && issues.Err() != nil {
-		return nil, "compile", issues.Err()
-	}
-
-	prg, err := celEnv.Program(ast)
-	if err != nil {
-		return nil, "program", err
-	}
-
-	out, _, err := prg.Eval(envVars)
-	if err != nil {
-		return nil, "runtime", err
-	}
-	return out, "", nil
-}
-
-func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
-	out, phase, err := evalCELValue(expr, envVars)
+func (e *evaluation) boolean(expr string, envVars map[string]any) (bool, string, error) {
+	out, phase, err := e.value(expr, envVars)
 	if err != nil {
 		return false, phase, err
 	}
@@ -147,10 +114,10 @@ func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
 	return false, "type", fmt.Errorf("expr result not bool: %T", out.Value())
 }
 
-// EvaluateConditions 对某一步骤的 pre/postconditions 进行求值
+// conditions evaluates a step's pre/postconditions in stable name order.
 // Declared conditions must evaluate successfully to a boolean. Evaluation
 // errors are failures, not skipped evidence.
-func EvaluateConditions(
+func (e *evaluation) conditions(
 	step spec.FlowStep,
 	op spec.ServiceOperation,
 	sp trace.Span,
@@ -163,8 +130,9 @@ func EvaluateConditions(
 	envVars, _ := buildEvalEnvForStep(step, sp, vars)
 
 	// 预条件
-	for name, expr := range op.Preconditions {
-		ok, phase, err := evalCELBool(expr, envVars)
+	for _, name := range sortedKeys(op.Preconditions) {
+		expr := op.Preconditions[name]
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"
@@ -181,8 +149,9 @@ func EvaluateConditions(
 	}
 
 	// 后置条件
-	for name, expr := range op.Postconditions {
-		ok, phase, err := evalCELBool(expr, envVars)
+	for _, name := range sortedKeys(op.Postconditions) {
+		expr := op.Postconditions[name]
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"

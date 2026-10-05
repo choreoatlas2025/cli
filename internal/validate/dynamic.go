@@ -11,9 +11,6 @@ import (
 	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
-// EnableSemantic 控制是否启用语义校验
-var EnableSemantic = true
-
 // StepResult 表示单个步骤的验证结果
 type StepResult struct {
 	Step       string            `json:"step"`
@@ -21,6 +18,7 @@ type StepResult struct {
 	Status     string            `json:"status"` // PASS / FAIL
 	Message    string            `json:"message,omitempty"`
 	Conditions []ConditionResult `json:"conditions,omitempty"`
+	Violations []EdgeViolation   `json:"violations,omitempty"`
 }
 
 // CausalityMode represents the causality checking mode
@@ -32,26 +30,39 @@ const (
 	CausalityOff      CausalityMode = "off"      // Disable causality checking
 )
 
-// Global causality mode setting
-var GlobalCausalityMode = CausalityTemporal
-
-// GlobalCausalityToleranceMs 因果约束容差（毫秒）
-var GlobalCausalityToleranceMs int64 = 50
-
 // ValidateAgainstTrace 根据追踪数据验证流程执行（支持因果和并发校验）
-func ValidateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
-	results, _ := validateAgainstTrace(fs, opIndex, tr)
-	return results, AllStepsPassed(results)
+func ValidateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace, config spec.ValidationConfig) ([]StepResult, bool) {
+	_, results, passed := ValidateWithPlan(fs, opIndex, tr, config)
+	return results, passed
 }
 
-func validateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
-	if err := trace.ValidateTimestamps(tr.Spans, GlobalCausalityMode != CausalityOff || hasParallel(fs.Flow)); err != nil {
+func ValidateWithPlan(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace, config spec.ValidationConfig) (*ContractPlan, []StepResult, bool) {
+	plan, err := CompilePlan(fs, opIndex, config)
+	if err != nil {
+		return nil, []StepResult{{Step: "contract-plan", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
+	}
+	results, passed := plan.ValidateTrace(tr)
+	return plan, results, passed
+}
+
+func validateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace, config spec.ValidationConfig, eval *evaluation) ([]StepResult, bool) {
+	if err := config.Validate(); err != nil {
+		return []StepResult{{Step: "validation-config", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
+	}
+	// Normalize a private graph copy; concurrent validations never mutate the caller's contract.
+	if fs.Graph != nil {
+		flowCopy, graphCopy := *fs, *fs.Graph
+		graphCopy.Edges = append([]spec.GraphEdge(nil), fs.Graph.Edges...)
+		flowCopy.Graph = &graphCopy
+		fs = &flowCopy
+	}
+	if err := trace.ValidateTimestamps(tr.Spans, CausalityMode(config.Causality) != CausalityOff || hasParallel(fs.Flow)); err != nil {
 		return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
 	}
 	if fs.IsGraphMode() {
-		return validateGraphAgainstTrace(fs, opIndex, tr)
+		return validateGraphAgainstTrace(fs, opIndex, tr, config, eval)
 	}
-	return validateWithCausality(fs, opIndex, tr)
+	return validateWithCausality(fs, opIndex, tr, config, eval)
 }
 
 func hasParallel(steps []spec.FlowStep) bool {
@@ -64,7 +75,7 @@ func hasParallel(steps []spec.FlowStep) bool {
 }
 
 // validateWithCausality 使用因果校验（支持并发）
-func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
+func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace, config spec.ValidationConfig, eval *evaluation) ([]StepResult, bool) {
 	// 构建调用图
 	graph, err := BuildCallGraph(tr.Spans)
 	if err != nil {
@@ -77,15 +88,15 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 	}
 
 	// 验证DAG约束（循环检测、边约束等）
-	toleranceNanos := GlobalCausalityToleranceMs * 1000000 // 转换为纳秒
+	toleranceNanos := config.ToleranceMs * 1000000 // 转换为纳秒
 	var violations []EdgeViolation
-	if GlobalCausalityMode != CausalityOff {
+	if CausalityMode(config.Causality) != CausalityOff {
 		violations = graph.ValidateEdgeConstraints(toleranceNanos)
 	}
 
 	// 执行因果校验
-	matched := matchFlowSteps(fs, graph)
-	results := evaluateFlowMatches(matched, opIndex)
+	matched := matchFlowSteps(fs, graph, config)
+	results := evaluateFlowMatches(matched, opIndex, config, eval)
 	allPassed := AllStepsPassed(results)
 
 	// 如果有违规，添加到结果中
@@ -93,24 +104,21 @@ func validateWithCausality(fs *spec.FlowSpec, opIndex map[string]map[string]spec
 		allPassed = false
 		// 在结果前插入DAG验证结果
 		dagResult := StepResult{
-			Step:    "DAG Validation",
-			Call:    "internal",
-			Status:  "FAIL",
-			Message: fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+			Step:       "DAG Validation",
+			Call:       "internal",
+			Status:     "FAIL",
+			Message:    fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+			Violations: violations,
 		}
 		results = append([]StepResult{dagResult}, results...)
 
-		// 输出详细的违规信息
-		for _, v := range violations {
-			fmt.Printf("[DAG Violation] %s: %s\n", v.Type, v.Message)
-		}
 	}
 
 	return results, allPassed
 }
 
 // validateGraphAgainstTrace validates DAG format against trace data
-func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace) ([]StepResult, bool) {
+func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.ServiceOperation, tr *trace.Trace, config spec.ValidationConfig, eval *evaluation) ([]StepResult, bool) {
 	if err := fs.Graph.ValidateGraphStructure(); err != nil {
 		return []StepResult{{Step: "graph-structure", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
 	}
@@ -129,26 +137,23 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 	}
 
 	// Validate DAG constraints (cycle detection, edge constraints)
-	toleranceNanos := GlobalCausalityToleranceMs * 1000000
+	toleranceNanos := config.ToleranceMs * 1000000
 	var violations []EdgeViolation
-	if GlobalCausalityMode != CausalityOff {
+	if CausalityMode(config.Causality) != CausalityOff {
 		violations = graph.ValidateEdgeConstraints(toleranceNanos)
 	}
 	if len(violations) > 0 {
 		okAll = false
 		// Add violations as a result
 		dagResult := StepResult{
-			Step:    "DAG Validation",
-			Call:    "internal",
-			Status:  "FAIL",
-			Message: fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+			Step:       "DAG Validation",
+			Call:       "internal",
+			Status:     "FAIL",
+			Message:    fmt.Sprintf("Detected %d DAG constraint violations", len(violations)),
+			Violations: violations,
 		}
 		results = append(results, dagResult)
 
-		// Output detailed violations
-		for _, v := range violations {
-			fmt.Printf("[DAG Violation] %s: %s\n", v.Type, v.Message)
-		}
 	}
 
 	// Build span matching index by service.operation
@@ -187,6 +192,9 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 	usedSpans := make(map[string]bool) // span service:name:startNanos
 
 	for _, nodeID := range topOrder {
+		if eval.ctx.Err() != nil {
+			return results, false
+		}
 		node := findNodeByID(fs.Graph, nodeID)
 		if node == nil {
 			results = append(results, StepResult{
@@ -209,8 +217,8 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 			if usedSpans[getSpanID(*span)] {
 				continue
 			}
-			if GlobalCausalityMode != CausalityOff {
-				if err := validateCausality(node, span, fs.Graph, matchedSpans); err != nil {
+			if CausalityMode(config.Causality) != CausalityOff {
+				if err := validateCausality(node, span, fs.Graph, matchedSpans, config); err != nil {
 					causalityErr = err
 					continue
 				}
@@ -237,7 +245,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 		if err != nil {
 			result.Status, result.Message = "FAIL", err.Error()
 		} else {
-			result, exports[node.ID] = evaluateStep(result, step, *matchedSpan, opIndex, vars)
+			result, exports[node.ID] = evaluateStep(result, step, *matchedSpan, opIndex, vars, config, eval)
 		}
 		okAll = okAll && result.Status == "PASS"
 		results = append(results, result)
@@ -247,7 +255,7 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 }
 
 // validateCausality checks causality constraints for DAG nodes
-func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.GraphSpec, matchedSpans map[string]*trace.Span) error {
+func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.GraphSpec, matchedSpans map[string]*trace.Span, config spec.ValidationConfig) error {
 	for _, predID := range getPredecessors(node.ID, graph) {
 		predSpan := matchedSpans[predID]
 		if predSpan == nil {
@@ -255,14 +263,14 @@ func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.G
 		}
 
 		// Apply causality mode
-		switch GlobalCausalityMode {
+		switch CausalityMode(config.Causality) {
 		case CausalityStrict:
 			// Check parent-child relationship
 			if !isParentChild(predSpan, nodeSpan) {
 				return fmt.Errorf("node %s should be child of %s (strict mode)", node.ID, predID)
 			}
 		case CausalityTemporal:
-			if !completesBefore(predSpan.EndNanos, nodeSpan.StartNanos) {
+			if !completesBefore(predSpan.EndNanos, nodeSpan.StartNanos, config.ToleranceMs) {
 				return fmt.Errorf("node %s starts before predecessor %s completes (temporal mode)", node.ID, predID)
 			}
 		}
@@ -272,8 +280,8 @@ func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.G
 }
 
 // Compare a nonnegative time difference without adding tolerance to a timestamp.
-func completesBefore(end, start int64) bool {
-	return end <= start || end-start <= GlobalCausalityToleranceMs*1000000
+func completesBefore(end, start, toleranceMs int64) bool {
+	return end <= start || end-start <= toleranceMs*1000000
 }
 
 // Helper functions

@@ -26,6 +26,11 @@ choreoatlas validate [options]
 | `--max-steps-degradation` | float | `0` | Maximum relative coverage degradation with a baseline (0.0-1.0) |
 | `--max-conds-degradation` | float | `0` | Maximum relative condition pass rate degradation with a baseline (0.0-1.0) |
 | `--skip-as-fail` | bool | `false` | Treat SKIP conditions as FAIL |
+| `--max-input-bytes` | integer | `33554432` | Per-file byte limit; combined captured customer inputs are limited to twice this |
+| `--max-spans` | integer | `10000` | Trace span limit |
+| `--max-steps` | integer | `2000` | Contract call-step limit |
+| `--max-cel-cost` | integer | `100000` | CEL expression and aggregate invocation cost limit, including output materialization |
+| `--validation-timeout-ms` | integer | `10000` | Cooperative preparation/evaluation timeout; maximum one hour |
 | `--report-format` | string | - | Report format: `json`, `junit`, or `html` |
 | `--report-out` | string | - | Path for report output |
 
@@ -81,6 +86,12 @@ validation (`3`), and cannot be recorded as a successful baseline.
 fields. It does not disable a Flow's explicit `parallel` overlap requirement:
 such flows still require complete, valid interval evidence. DAG independent
 nodes do not imply that their calls must overlap.
+
+The validation engine receives an explicit `ValidationConfig` per call. It
+does not change process-wide semantic, causality or tolerance settings, mutate
+the supplied DAG while normalizing dependencies, or write to stdout. Causal
+violations are returned with the step results; the CLI owns console output.
+Concurrent calls must treat their supplied contract and trace as read-only.
 
 DAG dependencies combine node `depends` and explicit `edges`. Supplying any
 explicit edges never disables another node's `depends` constraints. Duplicate
@@ -141,6 +152,43 @@ their identities. Each cleaned absolute path is read once. A later invocation
 captures changed files afresh. The capture is not atomic across files and does
 not deduplicate distinct symlink/hardlink paths by physical file identity;
 prevent concurrent writes when a consistent multi-file revision is required.
+
+## Qualified plans and resource limits
+
+`lint`, `init` qualification and default discovery qualification compile the
+contract's CEL conditions and outputs before accepting it. Syntax errors and
+statically non-boolean conditions are input errors (`2`). Dynamic field access
+and dynamic result types still require runtime evidence: an absent field or a
+non-boolean runtime condition fails validation (`3`). Runtime validation and
+baseline recording keep their existing code `3` for CEL preparation failures.
+Explicit `--semantic=false` skips semantic qualification and evaluation for
+runtime validation; it does not weaken structural checks.
+
+A `ContractPlan` owns a copy of the contract and compiled programs. Duplicate
+normalized expressions compile once per plan. Embedded callers can reuse a plan
+concurrently; each invocation has its own variables, cost counter and context.
+Changed contracts or settings require a new plan. There is no global compilation
+cache. Reports include the plan hash and resource settings under `inputs`.
+
+The resource flags also apply to `lint` and `baseline record`. Explicit flag
+values must be positive. Defaults limit each input to 32 MiB, total captured
+customer input to 64 MiB and input files to 128. The executing binary is exempt
+from the customer byte budget. Span counts are checked during JSON decoding and
+again for caller-supplied traces. Each expression is limited to 64 KiB and parser
+recursion to 100; total expression text is limited to 1 MiB and declarations to
+10,000. These limits also apply during generated-contract qualification.
+
+CEL cost is an operation estimate, not elapsed time or a hard memory quota.
+Each expression has the configured cost limit; aggregate actual CEL cost and
+one unit per materialized output node are charged to the invocation. An
+expression can finish before its aggregate cost is checked, but an overrun
+always fails the result. Cancellation is cooperative: CEL comprehensions check
+periodically, validation checks between stages/nodes, and preparation checks
+between expressions. Parsing, individual compilation and other non-CEL work
+are bounded by input/count limits but cannot be preempted at the deadline.
+
+Baselines bind resource settings alongside semantic settings. After changing
+limits, or upgrading from a baseline without these fields, record a new baseline.
 
 ## Cross-step values
 

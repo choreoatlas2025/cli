@@ -150,10 +150,11 @@ type flowMatcher struct {
 	nodes    []*CallNode
 	used     map[*CallNode]bool
 	previous []*CallNode
+	config   spec.ValidationConfig
 }
 
-func newFlowMatcher(graph *CallGraph) *flowMatcher {
-	m := &flowMatcher{used: map[*CallNode]bool{}}
+func newFlowMatcher(graph *CallGraph, config spec.ValidationConfig) *flowMatcher {
+	m := &flowMatcher{used: map[*CallNode]bool{}, config: config}
 	for _, node := range graph.Nodes {
 		m.nodes = append(m.nodes, node)
 	}
@@ -184,11 +185,11 @@ func (m *flowMatcher) match(step spec.FlowStep) matchedFlowStep {
 		}
 		valid := true
 		for _, pred := range m.previous {
-			switch GlobalCausalityMode {
+			switch CausalityMode(m.config.Causality) {
 			case CausalityStrict:
 				valid = valid && node.Parent == pred
 			case CausalityTemporal:
-				valid = valid && completesBefore(pred.EndNanos, node.StartNanos)
+				valid = valid && completesBefore(pred.EndNanos, node.StartNanos, m.config.ToleranceMs)
 			}
 		}
 		if !valid {
@@ -226,8 +227,8 @@ func (m *flowMatcher) parallel(steps []spec.FlowStep) []matchedFlowStep {
 	return matched
 }
 
-func matchFlowSteps(flow *spec.FlowSpec, graph *CallGraph) []matchedFlowStep {
-	m := newFlowMatcher(graph)
+func matchFlowSteps(flow *spec.FlowSpec, graph *CallGraph, config spec.ValidationConfig) []matchedFlowStep {
+	m := newFlowMatcher(graph, config)
 	var matched []matchedFlowStep
 	stage := 0
 	for _, step := range flow.Flow {
@@ -254,21 +255,21 @@ func matchFlowSteps(flow *spec.FlowSpec, graph *CallGraph) []matchedFlowStep {
 
 // CheckCausality validates every call, including calls attached to parallel
 // containers, with one-to-one matching and the configured dependency mode.
-func CheckCausality(flow *spec.FlowSpec, graph *CallGraph) ([]StepResult, bool) {
+func CheckCausality(flow *spec.FlowSpec, graph *CallGraph, config spec.ValidationConfig) ([]StepResult, bool) {
 	var results []StepResult
-	for _, matched := range matchFlowSteps(flow, graph) {
+	for _, matched := range matchFlowSteps(flow, graph, config) {
 		results = append(results, matched.result)
 	}
 	return results, AllStepsPassed(results)
 }
 
 func checkSingleStep(step spec.FlowStep, graph *CallGraph) StepResult {
-	return newFlowMatcher(graph).match(step).result
+	return newFlowMatcher(graph, spec.DefaultValidationConfig()).match(step).result
 }
 
 func checkParallelSteps(steps []spec.FlowStep, graph *CallGraph) []StepResult {
 	var results []StepResult
-	for _, matched := range newFlowMatcher(graph).parallel(steps) {
+	for _, matched := range newFlowMatcher(graph, spec.DefaultValidationConfig()).parallel(steps) {
 		results = append(results, matched.result)
 	}
 	return results
@@ -330,7 +331,13 @@ func isOverlapping(node1, node2 *CallNode) bool {
 }
 
 // ValidateSequentialSteps 验证顺序步骤（增强版的原有逻辑）
-func ValidateSequentialSteps(flow *spec.FlowSpec, spans []trace.Span) ([]StepResult, bool) {
+func ValidateSequentialSteps(flow *spec.FlowSpec, spans []trace.Span, config spec.ValidationConfig) ([]StepResult, bool) {
+	if err := config.Validate(); err != nil {
+		return []StepResult{{Step: "validation-config", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
+	}
+	if err := trace.ValidateTimestamps(spans, CausalityMode(config.Causality) != CausalityOff || hasParallel(flow.Flow)); err != nil {
+		return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
+	}
 	// 构建调用图
 	graph, err := BuildCallGraph(spans)
 	if err != nil {
@@ -343,7 +350,7 @@ func ValidateSequentialSteps(flow *spec.FlowSpec, spans []trace.Span) ([]StepRes
 	}
 
 	// 使用新的因果检查逻辑
-	return CheckCausality(flow, graph)
+	return CheckCausality(flow, graph, config)
 }
 
 // GetCallGraphStats 获取调用图统计信息

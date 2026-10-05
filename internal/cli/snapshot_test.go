@@ -39,7 +39,7 @@ func TestSnapshotLoadedContractIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, passed := validate.ValidateAgainstTrace(flow, contract.Operations, tr)
+	results, passed := validate.ValidateAgainstTrace(flow, contract.Operations, tr, spec.DefaultValidationConfig())
 	if !passed {
 		t.Fatal(results)
 	}

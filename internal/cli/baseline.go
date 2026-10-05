@@ -39,9 +39,13 @@ func runBaselineRecord(args []string) {
 	semantic := fs.Bool("semantic", true, "Enable semantic validation (CEL)")
 	causality := fs.String("causality", "temporal", "Causality mode: strict|temporal|off")
 	tolerance := fs.Int64("causality-tolerance", 50, "Causality tolerance in milliseconds")
+	limits := resourceFlags(fs)
 	_ = fs.Parse(args)
-	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causality, ToleranceMs: *tolerance}
-	if err := configureValidation(config); err != nil {
+	if err := checkResourceFlags(*limits); err != nil {
+		exitErr(err)
+	}
+	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causality, ToleranceMs: *tolerance, Limits: *limits}
+	if err := config.Validate(); err != nil {
 		exitErr(err)
 	}
 
@@ -50,20 +54,20 @@ func runBaselineRecord(args []string) {
 	}
 
 	// Load and validate flow specification
-	files := input.NewSnapshot(nil)
+	files := input.NewSnapshotWithLimit(nil, limits.MaxInputBytes)
 	contract, err := loadAndValidateContract(*flowPath, files)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Load trace data
-	tr, traceHash, err := loadTraceSnapshot(*tracePath, files)
+	tr, traceHash, err := loadTraceWithLimits(*tracePath, files, *limits)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Perform validation to get results
-	results, ok := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr)
+	results, ok := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr, config)
 	if !ok {
 		fmt.Fprintln(os.Stderr, "Validation failed; baseline not recorded.")
 		os.Exit(exitcode.ValidationFailed)

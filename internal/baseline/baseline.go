@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/fileio"
 	"maps"
 	"math"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/choreoatlas2025/cli/internal/result"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
@@ -39,12 +41,7 @@ type ThresholdConfig struct {
 }
 
 // GateResult represents the result of baseline gate evaluation
-type GateResult struct {
-	Checked    bool                   `json:"checked"`
-	Passed     bool                   `json:"passed"`
-	Details    map[string]interface{} `json:"details"`
-	Violations []string               `json:"violations,omitempty"`
-}
+type GateResult = result.GateResult
 
 // DefaultThresholds returns the default baseline thresholds
 func DefaultThresholds() ThresholdConfig {
@@ -145,7 +142,7 @@ func SaveBaseline(baseline *BaselineData, outputPath string) error {
 		return fmt.Errorf("failed to marshal baseline: %w", err)
 	}
 
-	return os.WriteFile(outputPath, data, 0644)
+	return fileio.WriteFile(outputPath, data, 0644)
 }
 
 // LoadBaseline reads baseline data from a JSON file
@@ -286,45 +283,14 @@ func EvaluateGate(results []validate.StepResult, thresholds ThresholdConfig, bas
 	if baseline != nil && baseline.StepsTotal <= 0 {
 		return &GateResult{Checked: true, Passed: false, Violations: []string{"invalid baseline: step count must be positive"}}
 	}
-	// Calculate current metrics
-	stepsTotal := len(results)
-	stepsPass := 0
-	conditionsTotal := 0
-	conditionsPass := 0
-	conditionsFail := 0
-
-	for _, result := range results {
-		if result.Status == "PASS" {
-			stepsPass++
-		}
-
-		for _, condition := range result.Conditions {
-			conditionsTotal++
-			switch condition.Status {
-			case "PASS":
-				conditionsPass++
-			case "FAIL":
-				conditionsFail++
-			case "SKIP":
-				if thresholds.SkipAsFail {
-					conditionsFail++
-				}
-				// Otherwise skip doesn't count in pass/fail
-			}
-		}
+	metrics := result.Measure(results)
+	stepsTotal, stepsPass := metrics.StepsTotal, metrics.StepsPass
+	conditionsTotal, conditionsPass, conditionsFail := metrics.ConditionsTotal, metrics.ConditionsPass, metrics.ConditionsFail
+	if thresholds.SkipAsFail {
+		conditionsFail += metrics.ConditionsSkip
 	}
-
-	// Calculate rates
-	var stepsCoverage float64
-	if stepsTotal > 0 {
-		stepsCoverage = float64(stepsPass) / float64(stepsTotal)
-	}
-
-	var conditionsRate float64
 	conditionsEvaluated := conditionsPass + conditionsFail
-	if conditionsEvaluated > 0 {
-		conditionsRate = float64(conditionsPass) / float64(conditionsEvaluated)
-	}
+	stepsCoverage, conditionsRate := metrics.StepsRate(), metrics.ConditionsRate(thresholds.SkipAsFail)
 
 	// Initialize gate checking variables
 	stepsPassed := stepsCoverage >= thresholds.StepsThreshold

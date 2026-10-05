@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -120,6 +121,7 @@ var (
 	Version      = "0.8.0-dev"
 	GitCommit    = "unknown"
 	BuildTime    = "unknown"
+	BuildChannel = "source"
 	BuildEdition = "ce" // CE版本标识
 )
 
@@ -128,6 +130,7 @@ func runVersion(args []string) {
 	fmt.Printf("Edition: Community Edition (CE)\n")
 	fmt.Printf("Git Commit: %s\n", GitCommit)
 	fmt.Printf("Build Time: %s\n", BuildTime)
+	fmt.Printf("Build Channel: %s\n", BuildChannel)
 	fmt.Printf("Go Version: %s\n", runtime.Version())
 	fmt.Printf("Platform: %s\n", fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH))
 }
@@ -163,7 +166,7 @@ func exitErr(err error) {
 
 	// 检查是否是文件/输入相关错误
 	errStr := err.Error()
-	if strings.Contains(errStr, "no such file") ||
+	if errors.Is(err, errIncompleteEvidence) || strings.Contains(errStr, "no such file") ||
 		strings.Contains(errStr, "cannot read") ||
 		strings.Contains(errStr, "failed to load") ||
 		strings.Contains(errStr, "failed to parse") ||

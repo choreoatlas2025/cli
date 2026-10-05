@@ -16,6 +16,7 @@ import (
 	"github.com/choreoatlas2025/cli/internal/schemas"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/validate"
 	"github.com/choreoatlas2025/cli/templates"
 	"gopkg.in/yaml.v3"
 )
@@ -188,7 +189,11 @@ func qualifyInitFiles(files []generatedFile, primaryTrace string) error {
 				err = trace.ValidateTimestamps(tr.Spans, true)
 			}
 		case strings.HasSuffix(file.path, ".flowspec.yaml"):
-			_, err = loadAndValidateContract(file.path, capture)
+			contract, loadErr := loadAndValidateContract(file.path, capture)
+			err = loadErr
+			if err == nil {
+				_, err = validate.CompilePlan(contract.Flow, contract.Operations, spec.DefaultValidationConfig())
+			}
 		case strings.HasSuffix(file.path, ".servicespec.yaml"):
 			err = spec.ValidateYAMLBytesWithSchemaFS(file.data, schemas.FS, "servicespec.schema.json")
 			if err == nil {

@@ -44,8 +44,8 @@ func TestBuildHTMLData(t *testing.T) {
 	if data.Summary.StepsTotal != 2 {
 		t.Errorf("Expected StepsTotal 2, got %d", data.Summary.StepsTotal)
 	}
-	if data.Summary.StepsPass != 1 {
-		t.Errorf("Expected StepsPass 1, got %d", data.Summary.StepsPass)
+	if data.Summary.StepsPass != 0 {
+		t.Errorf("A failed condition must not count as a passed step, got %d", data.Summary.StepsPass)
 	}
 	if data.Summary.StepsSkip != 1 {
 		t.Errorf("Expected StepsSkip 1, got %d", data.Summary.StepsSkip)
@@ -61,7 +61,7 @@ func TestBuildHTMLData(t *testing.T) {
 	}
 
 	// Verify coverage rate calculation
-	expectedStepsCoverage := 0.5 // 1 pass out of 2 total
+	expectedStepsCoverage := 0.0 // The nominal PASS step has a failed condition.
 	if data.Summary.StepsCoverage != expectedStepsCoverage {
 		t.Errorf("Expected StepsCoverage %f, got %f", expectedStepsCoverage, data.Summary.StepsCoverage)
 	}

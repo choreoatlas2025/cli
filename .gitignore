@@ -1,3 +1,7 @@
 # Build/test caches
 .gocache/
 bin/
+dist/
+
+# Python release tooling caches
+__pycache__/

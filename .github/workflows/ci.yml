@@ -3,17 +3,45 @@
 name: ChoreoAtlas CLI - CI
 
 on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+    outputs:
+      revision:
+        value: ${{ jobs.test.outputs.revision }}
+      tree:
+        value: ${{ jobs.test.outputs.tree }}
   push:
     branches: [ main, master, 'fix/**' ]
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    outputs:
+      revision: ${{ steps.identity.outputs.revision }}
+      tree: ${{ steps.identity.outputs.tree }}
+
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.revision || github.sha }}
+        fetch-depth: 0
+
+    - name: Bind exact source revision
+      id: identity
+      env:
+        EXPECTED_REVISION: ${{ inputs.revision || github.sha }}
+      run: |
+        test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+        echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "tree=$(git rev-parse HEAD^{tree})" >> "$GITHUB_OUTPUT"
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -32,6 +60,11 @@ jobs:
     - name: Run tests
       run: make test
     
+    - name: Check race and vet
+      run: |
+        GORACE=atexit_sleep_ms=0 go test -race ./... -count=1
+        go vet ./...
+
     - name: Build binary
       run: make build
 
@@ -63,13 +96,34 @@ jobs:
     - name: Run example validation
       run: make run-example
 
+    - name: Check manifest rejection cases
+      run: python3 -m unittest discover -s scripts -p test_build_manifest.py
+
+    - name: Record completed source checks
+      env:
+        QUALIFIED_REVISION: ${{ steps.identity.outputs.revision }}
+      run: python3 scripts/build-manifest.py --qualify --commit "$QUALIFIED_REVISION" --out "$RUNNER_TEMP/source-qualification.json"
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: source-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/source-qualification.json
+
   build:
     runs-on: ubuntu-latest
     needs: test
     
     steps:
     - uses: actions/checkout@v4
-    
+      with:
+        ref: ${{ needs.test.outputs.revision }}
+        fetch-depth: 0
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: source-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/qualification
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
@@ -88,6 +142,35 @@ jobs:
         # Windows AMD64
         GOOS=windows GOARCH=amd64 make build BIN=bin/choreoatlas-windows-amd64.exe
     
+    - name: Bind CI artifacts to tested source
+      env:
+        QUALIFIED_REVISION: ${{ needs.test.outputs.revision }}
+      run: |
+        python3 scripts/build-manifest.py --commit "$QUALIFIED_REVISION" --channel make \
+          --version "$(git describe --tags --always --dirty)" \
+          --qualification "$RUNNER_TEMP/qualification/source-qualification.json" \
+          --binary bin/choreoatlas-linux-amd64 --binary bin/choreoatlas-linux-arm64 \
+          --binary bin/choreoatlas-darwin-amd64 --binary bin/choreoatlas-darwin-arm64 \
+          --binary bin/choreoatlas-windows-amd64.exe --out bin/build-manifest.json
+        (cd bin && sha256sum choreoatlas-* build-manifest.json > SHA256SUMS.txt)
+
+    - name: Check GoReleaser build path
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        version: v2.12.0
+        args: build --snapshot --clean
+      env:
+        QUALIFICATION_FILE: ${{ runner.temp }}/qualification/source-qualification.json
+
+    - name: Check standalone Docker build path
+      env:
+        QUALIFIED_REVISION: ${{ needs.test.outputs.revision }}
+      run: |
+        docker build --build-arg GIT_COMMIT="$QUALIFIED_REVISION" --build-arg VERSION=ci-ce -t choreoatlas-ci .
+        docker run --rm choreoatlas-ci version | tee "$RUNNER_TEMP/docker-version.txt"
+        grep -Fx "Git Commit: $QUALIFIED_REVISION" "$RUNNER_TEMP/docker-version.txt"
+        grep -Fx "Build Channel: docker" "$RUNNER_TEMP/docker-version.txt"
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:

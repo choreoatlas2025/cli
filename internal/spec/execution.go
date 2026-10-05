@@ -5,6 +5,7 @@ package spec
 
 import (
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"math"
 	"strings"
 
@@ -12,13 +13,19 @@ import (
 )
 
 type ValidationConfig struct {
-	Semantic    bool   `json:"semantic"`
-	Causality   string `json:"causality"`
-	ToleranceMs int64  `json:"causalityToleranceMs"`
+	Semantic    bool         `json:"semantic"`
+	Causality   string       `json:"causality"`
+	ToleranceMs int64        `json:"causalityToleranceMs"`
+	Limits      input.Limits `json:"limits"`
+}
+
+func DefaultValidationConfig() ValidationConfig {
+	return ValidationConfig{Semantic: true, Causality: "temporal", ToleranceMs: 50}
 }
 
 // ExecutionIdentity records the tool, settings and input used to produce evidence.
 type ExecutionIdentity struct {
+	BuildChannel  string           `json:"buildChannel,omitempty"`
 	Version       string           `json:"version"`
 	GitCommit     string           `json:"gitCommit"`
 	ValidatorHash string           `json:"validatorHash"`
@@ -34,7 +41,7 @@ func (c ValidationConfig) Validate() error {
 	if c.ToleranceMs < 0 || c.ToleranceMs > math.MaxInt64/1000000 {
 		return fmt.Errorf("invalid causality-tolerance: outside supported nonnegative range")
 	}
-	return nil
+	return c.Limits.Validate()
 }
 
 func (e ExecutionIdentity) Validate() error {

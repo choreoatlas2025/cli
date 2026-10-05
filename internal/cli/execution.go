@@ -4,39 +4,36 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
-	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
-func configureValidation(config spec.ValidationConfig) error {
-	if err := config.Validate(); err != nil {
-		return err
-	}
-	validate.EnableSemantic = config.Semantic
-	validate.GlobalCausalityMode = validate.CausalityMode(config.Causality)
-	validate.GlobalCausalityToleranceMs = config.ToleranceMs
-	return nil
-}
+var errIncompleteEvidence = errors.New("evidence incomplete")
 
 func executionIdentity(tr *trace.Trace, traceHash string, config spec.ValidationConfig, files *input.Snapshot) (spec.ExecutionIdentity, error) {
-	id := spec.ExecutionIdentity{Version: Version, GitCommit: GitCommit, Config: config, TraceHash: traceHash}
+	return executionIdentityWith(tr, traceHash, config, files, os.Executable)
+}
+
+func executionIdentityWith(tr *trace.Trace, traceHash string, config spec.ValidationConfig, files *input.Snapshot, executable func() (string, error)) (spec.ExecutionIdentity, error) {
+	id := spec.ExecutionIdentity{Version: Version, GitCommit: GitCommit, BuildChannel: BuildChannel, Config: config, TraceHash: traceHash}
 	var err error
 	id.TraceIdentity, err = trace.Identify(tr.Spans)
 	if err != nil {
 		id.TraceIdentity = trace.Identity{Binding: "invalid"}
 	}
-	path, err := os.Executable()
+	path, err := executable()
 	if err != nil {
-		return id, err
+		return id, fmt.Errorf("%w: executing tool identity unavailable: %w", errIncompleteEvidence, err)
 	}
-	file, err := files.Read(path)
+	hash, err := files.HashExecutable(path)
 	if err != nil {
-		return id, err
+		return id, fmt.Errorf("%w: executing tool identity unavailable: %w", errIncompleteEvidence, err)
 	}
-	id.ValidatorHash = file.Hash()
+	id.ValidatorHash = hash
 	return id, nil
 }

@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"io"
-	"os"
 )
 
 // Trace 表示追踪数据
@@ -103,7 +103,7 @@ func ValidateTimestamps(spans []Span, required bool) error {
 
 // LoadFromFile 从文件加载追踪数据
 func LoadFromFile(path string) (*Trace, error) {
-	tb, err := os.ReadFile(path)
+	tb, err := input.ReadFileLimited(path, input.DefaultMaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read trace file: %w", err)
 	}
@@ -111,10 +111,21 @@ func LoadFromFile(path string) (*Trace, error) {
 }
 
 func Parse(tb []byte) (*Trace, error) {
+	return ParseWithMaxSpans(tb, input.Limits{}.Normalized().MaxSpans)
+}
+
+// Decode spans incrementally so the configured count bounds allocation as well as matching.
+func ParseWithMaxSpans(tb []byte, maxSpans int) (*Trace, error) {
 	var tr Trace
+	if maxSpans < 1 {
+		return nil, fmt.Errorf("invalid maximum span count")
+	}
+	wire := struct {
+		Spans spanList `json:"spans"`
+	}{Spans: spanList{spans: &tr.Spans, max: maxSpans}}
 	decoder := json.NewDecoder(bytes.NewReader(tb))
 	decoder.UseNumber()
-	if err := decoder.Decode(&tr); err != nil {
+	if err := decoder.Decode(&wire); err != nil {
 		return nil, fmt.Errorf("failed to parse trace data: %w", err)
 	}
 	// Keep json.Unmarshal's single-document requirement.
@@ -125,4 +136,37 @@ func Parse(tb []byte) (*Trace, error) {
 		return nil, fmt.Errorf("failed to parse trace data: %w", err)
 	}
 	return &tr, nil
+}
+
+// A custom array decoder checks the count before appending the next span.
+type spanList struct {
+	spans *[]Span
+	max   int
+}
+
+func (s *spanList) UnmarshalJSON(data []byte) error {
+	*s.spans = nil
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if token != json.Delim('[') {
+		return fmt.Errorf("invalid spans: an array is required")
+	}
+	for decoder.More() {
+		if len(*s.spans) >= s.max {
+			return fmt.Errorf("invalid trace: span count exceeds %d", s.max)
+		}
+		var span Span
+		if err := decoder.Decode(&span); err != nil {
+			return err
+		}
+		*s.spans = append(*s.spans, span)
+	}
+	_, err = decoder.Token()
+	return err
 }

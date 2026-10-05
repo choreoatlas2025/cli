@@ -195,7 +195,7 @@ func TestEvaluateGate(t *testing.T) {
 				ConditionsThreshold: 0.9,
 			},
 			expectPass:       false,
-			expectViolations: 1,
+			expectViolations: 2,
 		},
 		{
 			name: "Skip as fail enabled",
@@ -210,7 +210,7 @@ func TestEvaluateGate(t *testing.T) {
 				SkipAsFail:          true,
 			},
 			expectPass:       false,
-			expectViolations: 1,
+			expectViolations: 2,
 		},
 	}
 

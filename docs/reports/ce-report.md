@@ -107,3 +107,40 @@ fields as text nodes. Timeline tooltips use the DOM `title` property. These
 fields do not become HTML markup or event handlers. The repository's CI verifies
 this behavior against a Go-generated report in a real browser, together with
 zero-threshold rendering.
+
+The gate and all report formats use the shared `internal/result` model for
+input identity, outcome and coverage measurements. JSON/JUnit no longer depend
+on HTML model types. Existing report field names and units remain unchanged.
+A nominal PASS step with a failed or unevaluated condition is counted as failed,
+using the same predicate as the final outcome. SKIP steps retain their separate
+summary count; `uncoveredSteps` retains its legacy list of failed calls.
+
+## Output replacement and incomplete evidence
+
+JSON, JUnit, HTML and baseline outputs are staged beside their destination,
+flushed to disk, closed, then renamed into place. Existing regular-file
+permissions are retained; symlink and non-regular destinations are rejected.
+A failure before rename leaves the previous output untouched and removes the
+stage during normal cleanup. A directory-sync failure after rename explicitly
+says the new output is committed but its durability is unconfirmed. Inspect
+that output before retrying. POSIX builds sync the destination directory;
+Windows has no directory-sync guarantee through this implementation.
+
+An interrupted process can leave `.choreoatlas-stage-*` files beside the output.
+Before rename the old destination remains; after rename the destination contains
+the complete new file. Serialize writes and prevent destination changes during
+replacement: there is no writer lock or compare-and-swap policy. Rename/durability
+semantics depend on the destination filesystem; these local tests do not prove
+network-filesystem or power-loss behavior.
+
+Generated contract sets use synced stages and in-process rollback for ordinary
+errors. Their multiple renames are not a crash-atomic transaction. If interrupted,
+inspect the whole set, including stage/backup files, and rerun qualification before
+use. No cross-file recovery journal is supplied.
+
+Reports, baseline recording and baseline comparison require a readable executing
+binary. Tool identity is streamed and cached once per invocation, independently
+of customer input limits. An unavailable executable path or unreadable tool
+returns input error `2` with `evidence incomplete`; no new report/baseline replaces
+the old one. Ordinary validation without a report or consumed baseline can still
+run without binary identity. No substitute hash or `unknown` proof is invented.

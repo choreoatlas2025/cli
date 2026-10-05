@@ -11,11 +11,15 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/validate"
 	"gopkg.in/yaml.v3"
 )
 
 func validateGeneratedFlow(path string) error {
-	_, _, err := loadAndValidateFlow(path)
+	flow, ops, err := loadAndValidateFlow(path)
+	if err == nil {
+		_, err = validate.CompilePlan(flow, ops, spec.DefaultValidationConfig())
+	}
 	return err
 }
 
