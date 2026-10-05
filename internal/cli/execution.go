@@ -6,6 +6,7 @@ package cli
 import (
 	"os"
 
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -21,13 +22,9 @@ func configureValidation(config spec.ValidationConfig) error {
 	return nil
 }
 
-func executionIdentity(tr *trace.Trace, tracePath string, config spec.ValidationConfig) (spec.ExecutionIdentity, error) {
-	id := spec.ExecutionIdentity{Version: Version, GitCommit: GitCommit, Config: config}
+func executionIdentity(tr *trace.Trace, traceHash string, config spec.ValidationConfig, files *input.Snapshot) (spec.ExecutionIdentity, error) {
+	id := spec.ExecutionIdentity{Version: Version, GitCommit: GitCommit, Config: config, TraceHash: traceHash}
 	var err error
-	id.TraceHash, err = spec.HashFile(tracePath)
-	if err != nil {
-		return id, err
-	}
 	id.TraceIdentity, err = trace.Identify(tr.Spans)
 	if err != nil {
 		id.TraceIdentity = trace.Identity{Binding: "invalid"}
@@ -36,6 +33,10 @@ func executionIdentity(tr *trace.Trace, tracePath string, config spec.Validation
 	if err != nil {
 		return id, err
 	}
-	id.ValidatorHash, err = spec.HashFile(path)
-	return id, err
+	file, err := files.Read(path)
+	if err != nil {
+		return id, err
+	}
+	id.ValidatorHash = file.Hash()
+	return id, nil
 }

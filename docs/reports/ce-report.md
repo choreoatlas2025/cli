@@ -82,6 +82,15 @@ causality settings, and threshold policy. JSON and HTML use `inputs`; JUnit uses
 the JSON-valued `result.inputs` property. These bindings identify which inputs and
 rules produced a result; reports do not re-evaluate themselves after files change.
 
+Each invocation captures each cleaned absolute input path once. Schema checks,
+parsing, runtime validation, baseline compatibility/recording and report hashes
+use those captured bytes. Replacing or deleting a path after capture does not
+rebind that invocation's result; a later invocation reads the changed files.
+Referenced aliases with the same cleaned path share the capture. This is not an
+atomic snapshot across multiple files, and distinct symlink/hardlink paths are
+not deduplicated by physical file identity. Prevent concurrent writes when a
+consistent multi-file revision is required.
+
 `traceIdentity.binding` is `trace-id` when every span carries the same trace ID,
 `file-only` for legacy unlabelled inputs, and `invalid` in reports of rejected
 mixed or malformed identity inputs. Reports also expose the consumed baseline's

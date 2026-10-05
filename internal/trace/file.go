@@ -28,6 +28,10 @@ func LoadFromFile(path string) (*Trace, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read trace file: %w", err)
 	}
+	return Parse(tb)
+}
+
+func Parse(tb []byte) (*Trace, error) {
 	var tr Trace
 	if err := json.Unmarshal(tb, &tr); err != nil {
 		return nil, fmt.Errorf("failed to parse trace data: %w", err)

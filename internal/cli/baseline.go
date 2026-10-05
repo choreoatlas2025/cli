@@ -11,9 +11,8 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
-	"github.com/choreoatlas2025/cli/internal/schemas"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
@@ -51,30 +50,31 @@ func runBaselineRecord(args []string) {
 	}
 
 	// Load and validate flow specification
-	flow, opIndex, err := loadAndValidateFlow(*flowPath)
+	files := input.NewSnapshot(nil)
+	contract, err := loadAndValidateContract(*flowPath, files)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Load trace data
-	tr, err := trace.LoadFromFile(*tracePath)
+	tr, traceHash, err := loadTraceSnapshot(*tracePath, files)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Perform validation to get results
-	results, ok := validate.ValidateAgainstTrace(flow, opIndex, tr)
+	results, ok := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr)
 	if !ok {
 		fmt.Fprintln(os.Stderr, "Validation failed; baseline not recorded.")
 		os.Exit(exitcode.ValidationFailed)
 	}
 
 	// Record baseline
-	provenance, err := executionIdentity(tr, *tracePath, config)
+	provenance, err := executionIdentity(tr, traceHash, config, files)
 	if err != nil {
 		exitErr(err)
 	}
-	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath, provenance)
+	baselineData, err := baseline.RecordBaseline(contract, results, provenance)
 	if err != nil {
 		if errors.Is(err, baseline.ErrIncompleteValidation) {
 			fmt.Fprintln(os.Stderr, err)
@@ -97,43 +97,22 @@ func runBaselineRecord(args []string) {
 
 // loadAndValidateFlow loads flow spec and validates it
 func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, error) {
-	flow, opIndex, issues, err := loadContract(flowPath, true)
+	contract, err := loadAndValidateContract(flowPath, input.NewSnapshot(nil))
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, issue := range issues {
-		if issue.Level == "ERROR" {
-			return nil, nil, fmt.Errorf("invalid contract: %s", issue.Msg)
-		}
-	}
-	return flow, opIndex, nil
+	return contract.Flow, contract.Operations, nil
 }
 
-func loadContract(flowPath string, useSchema bool) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, []validate.LintIssue, error) {
-	if useSchema {
-		if err := spec.ValidateYAMLWithSchemaFS(flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid FlowSpec: %w", err)
+func loadAndValidateContract(flowPath string, files *input.Snapshot) (*spec.ContractSnapshot, error) {
+	contract, issues, err := loadContractWithFiles(flowPath, true, files)
+	if err != nil {
+		return nil, err
+	}
+	for _, issue := range issues {
+		if issue.Level == "ERROR" {
+			return nil, fmt.Errorf("invalid contract: %s", issue.Msg)
 		}
 	}
-	flow, err := spec.LoadFlowSpec(flowPath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if useSchema {
-		for alias, binding := range flow.Services {
-			if err := spec.ValidateYAMLWithSchemaFS(spec.ResolvePath(flowPath, binding.Spec), schemas.FS, "servicespec.schema.json"); err != nil {
-				return nil, nil, nil, fmt.Errorf("invalid ServiceSpec %s: %w", alias, err)
-			}
-		}
-	}
-
-	_, opIndex, err := flow.BuildOperationIndex(flowPath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	issues, err := validate.LintFlow(flowPath, flow, opIndex)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return flow, opIndex, issues, nil
+	return contract, nil
 }

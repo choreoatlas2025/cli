@@ -67,7 +67,8 @@ func ValidateThresholds(t ThresholdConfig) error {
 }
 
 // RecordBaseline creates a baseline from validation results
-func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flowPath string, provenance spec.ExecutionIdentity) (*BaselineData, error) {
+func RecordBaseline(contract *spec.ContractSnapshot, results []validate.StepResult, provenance spec.ExecutionIdentity) (*BaselineData, error) {
+	flowSpec := contract.Flow
 	if strings.TrimSpace(flowSpec.Info.Title) == "" {
 		return nil, fmt.Errorf("invalid baseline contract: info.title must not be empty")
 	}
@@ -92,10 +93,7 @@ func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flow
 	if len(expected) != 0 {
 		return nil, ErrIncompleteValidation
 	}
-	identity, err := spec.IdentifyContract(flowSpec, flowPath)
-	if err != nil {
-		return nil, err
-	}
+	identity := contract.Identity()
 
 	// Extract covered steps (PASS status)
 	var coveredSteps []string
@@ -131,7 +129,7 @@ func RecordBaseline(flowSpec *spec.FlowSpec, results []validate.StepResult, flow
 	}
 
 	// Never write an object which would fail the normal consumption checks.
-	if err := ValidateCompatibility(baseline, flowSpec, flowPath); err != nil {
+	if err := ValidateCompatibility(baseline, contract); err != nil {
 		return nil, err
 	}
 	return baseline, nil
@@ -156,7 +154,10 @@ func LoadBaseline(path string) (*BaselineData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read baseline file: %w", err)
 	}
+	return ParseBaseline(data)
+}
 
+func ParseBaseline(data []byte) (*BaselineData, error) {
 	var baseline BaselineData
 	if err := json.Unmarshal(data, &baseline); err != nil {
 		return nil, fmt.Errorf("failed to parse baseline: %w", err)
@@ -231,14 +232,12 @@ func validHash(hash string) bool {
 	return true
 }
 
-func ValidateCompatibility(b *BaselineData, flow *spec.FlowSpec, flowPath string) error {
+func ValidateCompatibility(b *BaselineData, contract *spec.ContractSnapshot) error {
 	if err := validateBaselineData(b); err != nil {
 		return err
 	}
-	identity, err := spec.IdentifyContract(flow, flowPath)
-	if err != nil {
-		return err
-	}
+	flow := contract.Flow
+	identity := contract.Identity()
 	if b.FlowID != identity.FlowID || b.FlowHash != identity.FlowHash || !maps.Equal(b.ServiceHashes, identity.ServiceHashes) {
 		return fmt.Errorf("invalid baseline: contract identity changed; record a new baseline")
 	}
@@ -249,10 +248,7 @@ func ValidateCompatibility(b *BaselineData, flow *spec.FlowSpec, flowPath string
 	if len(covered) != flow.GetStepsCount() {
 		return fmt.Errorf("invalid baseline: step count does not match contract")
 	}
-	_, ops, err := flow.BuildOperationIndex(flowPath)
-	if err != nil {
-		return err
-	}
+	ops := contract.Operations
 	for _, step := range flow.CallSteps() {
 		if !covered[step.Step] {
 			return fmt.Errorf("invalid baseline: contract step %s is absent", step.Step)

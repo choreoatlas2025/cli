@@ -17,7 +17,7 @@ func runLint(args []string) {
 	useSchema := fs.Bool("schema", true, "Enable JSON Schema strict validation")
 	_ = fs.Parse(args)
 
-	_, _, issues, err := loadContract(*flowPath, *useSchema)
+	_, issues, err := loadContract(*flowPath, *useSchema)
 	if err != nil {
 		exitErr(err)
 	}

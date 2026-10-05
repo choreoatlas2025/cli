@@ -11,9 +11,9 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/report/html"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
@@ -54,7 +54,8 @@ func runValidate(args []string) {
 		exitErr(errors.New("--trace parameter is required"))
 	}
 
-	flow, opIndex, issues, err := loadContract(*flowPath, true)
+	files := input.NewSnapshot(nil)
+	contract, issues, err := loadContractWithFiles(*flowPath, true, files)
 	if err != nil {
 		exitErr(err)
 	}
@@ -69,22 +70,26 @@ func runValidate(args []string) {
 	}
 
 	// Load trace data
-	tr, err := trace.LoadFromFile(*tracePath)
+	tr, traceHash, err := loadTraceSnapshot(*tracePath, files)
 	if err != nil {
 		exitErr(err)
 	}
 
-	results, _ := validate.ValidateAgainstTrace(flow, opIndex, tr)
-
 	// Baseline gate check
 	var gateResult *baseline.GateResult
 	var baselineData *baseline.BaselineData
+	var baselineHash string
 	baselineExpected := *baselinePath != ""
 
 	if baselineExpected {
 		// Load baseline for comparison
 		var err error
-		baselineData, err = baseline.LoadBaseline(*baselinePath)
+		baselineFile, readErr := files.Read(*baselinePath)
+		err = readErr
+		if readErr == nil {
+			baselineData, err = baseline.ParseBaseline(baselineFile.Bytes())
+			baselineHash = baselineFile.Hash()
+		}
 		if err != nil {
 			// Handle baseline missing according to strategy
 			if *baselineMissing == "fail" {
@@ -97,18 +102,24 @@ func runValidate(args []string) {
 			}
 		}
 		if baselineData != nil {
-			if err := baseline.ValidateCompatibility(baselineData, flow, *flowPath); err != nil {
-				exitErr(err)
-			}
-			current, err := executionIdentity(tr, *tracePath, config)
-			if err != nil {
-				exitErr(err)
-			}
-			if err := baseline.ValidateExecution(baselineData, current); err != nil {
+			if err := baseline.ValidateCompatibility(baselineData, contract); err != nil {
 				exitErr(err)
 			}
 		}
 	}
+	var execution spec.ExecutionIdentity
+	if baselineData != nil || (*reportFormat != "" && *reportOut != "") {
+		execution, err = executionIdentity(tr, traceHash, config, files)
+		if err != nil {
+			exitErr(err)
+		}
+		if baselineData != nil {
+			if err := baseline.ValidateExecution(baselineData, execution); err != nil {
+				exitErr(err)
+			}
+		}
+	}
+	results, _ := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr)
 
 	// Execute threshold gate (with optional baseline)
 	gateResult = baseline.EvaluateGate(results, thresholds, baselineData)
@@ -116,35 +127,11 @@ func runValidate(args []string) {
 
 	// Generate report (if format and path specified)
 	if *reportFormat != "" && *reportOut != "" {
-		contract, err := spec.IdentifyContract(flow, *flowPath)
-		if err != nil {
-			exitErr(err)
-		}
-		traceHash, err := spec.HashFile(*tracePath)
-		if err != nil {
-			exitErr(err)
-		}
-		inputs := &html.InputBinding{Contract: contract, TraceHash: traceHash, Version: Version, GitCommit: GitCommit, Semantic: *semantic, Causality: *causalityMode, ToleranceMs: int64(*causalityTolerance)}
-		binaryPath, err := os.Executable()
-		if err != nil {
-			exitErr(err)
-		}
-		inputs.ValidatorHash, err = spec.HashFile(binaryPath)
-		if err != nil {
-			exitErr(err)
-		}
+		inputs := &html.InputBinding{Contract: contract.Identity(), TraceHash: execution.TraceHash, Version: execution.Version, GitCommit: execution.GitCommit, Semantic: execution.Config.Semantic, Causality: execution.Config.Causality, ToleranceMs: execution.Config.ToleranceMs, ValidatorHash: execution.ValidatorHash, TraceIdentity: execution.TraceIdentity}
 		inputs.Policy = gateResult.Details
-		// A failed mixed-ID trace remains reportable; expose that identity was not verified.
-		inputs.TraceIdentity, err = trace.Identify(tr.Spans)
-		if err != nil {
-			inputs.TraceIdentity = trace.Identity{Binding: "invalid"}
-		}
 		if baselineData != nil {
 			inputs.BaselineProvenance = &baselineData.Provenance
-			inputs.BaselineHash, err = spec.HashFile(*baselinePath)
-			if err != nil {
-				exitErr(err)
-			}
+			inputs.BaselineHash = baselineHash
 		}
 		var format ReportFormat
 		switch *reportFormat {

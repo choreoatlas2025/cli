@@ -8,12 +8,11 @@ import (
 )
 
 func runCIGate(args []string) {
-	// CI Gate = lint + validate
+	// Dynamic validation includes schema and lint on the same captured contract.
 	fs := flag.NewFlagSet("ci-gate", flag.ExitOnError)
 	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
 	tracePath := fs.String("trace", "", "trace.json path")
 	_ = fs.Parse(args)
 
-	runLint([]string{"--flow", *flowPath})
 	runValidate([]string{"--flow", *flowPath, "--trace", *tracePath})
 }

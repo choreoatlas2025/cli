@@ -107,6 +107,14 @@ for recording and consumption. Empty or whitespace-only titles cannot be recorde
 Reports bind contract files, trace data, the consumed baseline, validator binary,
 and validation settings under `inputs` (JUnit: `result.inputs` property).
 
+Within one invocation, Schema checks, parsing, runtime validation and input
+hashes use the same captured bytes. Baseline loading, compatibility checks and
+recording reuse that capture; reports never reopen these inputs to calculate
+their identities. Each cleaned absolute path is read once. A later invocation
+captures changed files afresh. The capture is not atomic across files and does
+not deduplicate distinct symlink/hardlink paths by physical file identity;
+prevent concurrent writes when a consistent multi-file revision is required.
+
 ## Cross-step values
 
 With semantic validation enabled, a successful step evaluates its `output` CEL

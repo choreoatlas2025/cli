@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -82,14 +83,18 @@ func TestRecordBaseline(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tempDir, "svc.yaml"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	contract, err := spec.LoadContractSnapshot(flowPath, input.NewSnapshot(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Failed or internally inconsistent results cannot become a baseline.
-	if _, err := RecordBaseline(flowSpec, results, flowPath, testProvenance()); err == nil {
+	if _, err := RecordBaseline(contract, results, testProvenance()); err == nil {
 		t.Fatal("expected failed results to be rejected")
 	}
 	results[1].Conditions[0].Status = "PASS"
 	results[2].Status = "PASS"
-	baseline, err := RecordBaseline(flowSpec, results, flowPath, testProvenance())
+	baseline, err := RecordBaseline(contract, results, testProvenance())
 	if err != nil {
 		t.Fatalf("RecordBaseline failed: %v", err)
 	}

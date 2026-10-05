@@ -34,6 +34,10 @@ func LoadServiceSpec(path string) (*ServiceSpecFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read servicespec: %w", err)
 	}
+	return ParseServiceSpec(b)
+}
+
+func ParseServiceSpec(b []byte) (*ServiceSpecFile, error) {
 	var ss ServiceSpecFile
 	if err := yaml.Unmarshal(b, &ss); err != nil {
 		return nil, fmt.Errorf("failed to parse servicespec: %w", err)
@@ -41,7 +45,7 @@ func LoadServiceSpec(path string) (*ServiceSpecFile, error) {
 	seen := map[string]bool{}
 	for _, op := range ss.Operations {
 		if seen[op.OperationId] {
-			return nil, fmt.Errorf("invalid ServiceSpec %s: duplicate operationId %q", path, op.OperationId)
+			return nil, fmt.Errorf("invalid ServiceSpec: duplicate operationId %q", op.OperationId)
 		}
 		seen[op.OperationId] = true
 	}

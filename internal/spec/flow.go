@@ -70,7 +70,10 @@ func LoadFlowSpec(path string) (*FlowSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read flowspec: %w", err)
 	}
+	return ParseFlowSpec(b)
+}
 
+func ParseFlowSpec(b []byte) (*FlowSpec, error) {
 	// Try to parse with graph format first (preferred)
 	var fs FlowSpec
 	if err := yaml.Unmarshal(b, &fs); err != nil {

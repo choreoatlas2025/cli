@@ -18,6 +18,10 @@ func ValidateYAMLWithSchemaFS(yamlPath string, fsys fs.FS, schemaName string) er
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", yamlPath, err)
 	}
+	return ValidateYAMLBytesWithSchemaFS(b, fsys, schemaName)
+}
+
+func ValidateYAMLBytesWithSchemaFS(b []byte, fsys fs.FS, schemaName string) error {
 	var data any
 	if err := yaml.Unmarshal(b, &data); err != nil {
 		return fmt.Errorf("failed to parse YAML: %w", err)
