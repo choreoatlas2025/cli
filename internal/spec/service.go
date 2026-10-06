@@ -3,14 +3,15 @@
 package spec
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
-    "regexp"
-    "strings"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
 
-    "gopkg.in/yaml.v3"
-    "github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/trace"
+	"gopkg.in/yaml.v3"
 )
 
 // ServiceSpecFile 表示服务规约文件（文件内可包含多个 operation）
@@ -33,97 +34,119 @@ func LoadServiceSpec(path string) (*ServiceSpecFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read servicespec: %w", err)
 	}
+	return ParseServiceSpec(b)
+}
+
+func ParseServiceSpec(b []byte) (*ServiceSpecFile, error) {
 	var ss ServiceSpecFile
 	if err := yaml.Unmarshal(b, &ss); err != nil {
 		return nil, fmt.Errorf("failed to parse servicespec: %w", err)
 	}
+	seen := map[string]bool{}
+	for _, op := range ss.Operations {
+		if seen[op.OperationId] {
+			return nil, fmt.Errorf("invalid ServiceSpec: duplicate operationId %q", op.OperationId)
+		}
+		seen[op.OperationId] = true
+	}
 	return &ss, nil
 }
 
-// GenerateServiceSpecs 从 trace spans 生成 ServiceSpec 文件
-func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
-	// 按服务分组操作
-	serviceOps := groupSpansByService(spans)
-	
-	// 确保输出目录存在
-	if err := os.MkdirAll(outDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+// BuildServiceSpecFiles generates data without changing any destination files.
+func BuildServiceSpecFiles(spans []trace.Span) (map[string][]byte, error) {
+	groups, err := groupSpansByService(spans)
+	if err != nil {
+		return nil, err
 	}
-	
-	// 为每个服务生成 ServiceSpec 文件
-	for serviceName, operations := range serviceOps {
-		spec := &ServiceSpecFile{
-			Service:    serviceName,
-			Operations: operations,
+	files := map[string][]byte{}
+	for service, operations := range groups {
+		name := ServiceSpecFilename(service)
+		if _, exists := files[name]; exists {
+			return nil, fmt.Errorf("invalid service names: filename collision for %s", name)
 		}
-		
-		// 序列化为 YAML
-		data, err := yaml.Marshal(spec)
+		sort.Slice(operations, func(i, j int) bool { return operations[i].OperationId < operations[j].OperationId })
+		data, err := yaml.Marshal(&ServiceSpecFile{Service: service, Operations: operations})
 		if err != nil {
-			return fmt.Errorf("failed to serialize ServiceSpec for service %s: %w", serviceName, err)
+			return nil, err
 		}
-		
-		// 写入文件
-		filename := fmt.Sprintf("%s.servicespec.yaml", normalizeServiceName(serviceName))
-		filePath := filepath.Join(outDir, filename)
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return fmt.Errorf("failed to write ServiceSpec file %s: %w", filePath, err)
-		}
-
-		fmt.Printf("Generated ServiceSpec: %s\n", filePath)
+		files[name] = data
 	}
-	
+	return files, nil
+}
+
+func ServiceSpecFilename(service string) string {
+	return normalizeServiceName(service) + ".servicespec.yaml"
+}
+
+func GenerateServiceSpecs(spans []trace.Span, outDir string) error {
+	files, err := BuildServiceSpecFiles(spans)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		path := filepath.Join(outDir, name)
+		if err := os.WriteFile(path, files[name], 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("Generated ServiceSpec: %s\n", path)
+	}
 	return nil
 }
 
 // groupSpansByService 按服务分组 spans 并生成操作
-func groupSpansByService(spans []trace.Span) map[string][]ServiceOperation {
-    serviceOps := make(map[string][]ServiceOperation)
+func groupSpansByService(spans []trace.Span) (map[string][]ServiceOperation, error) {
+	serviceOps := make(map[string][]ServiceOperation)
 
-    // 按服务和操作分组
-    opGroups := make(map[string]map[string][]trace.Span)
+	// 按服务和操作分组
+	opGroups := make(map[string]map[string][]trace.Span)
+	sources := make(map[string]map[string]string)
 
-    for _, span := range spans {
-        if span.Service == "" || span.Name == "" {
-            continue
-        }
+	for _, span := range spans {
+		if span.Service == "" || span.Name == "" {
+			continue
+		}
 
-        service := span.Service
-        opName := ComputeOperationID(span)
+		service := span.Service
+		opName := ComputeOperationID(span)
 
-        if _, exists := opGroups[service]; !exists {
-            opGroups[service] = make(map[string][]trace.Span)
-        }
-        opGroups[service][opName] = append(opGroups[service][opName], span)
-    }
-	
+		if _, exists := opGroups[service]; !exists {
+			opGroups[service] = make(map[string][]trace.Span)
+			sources[service] = make(map[string]string)
+		}
+		source := operationSource(span)
+		if previous, exists := sources[service][opName]; exists && previous != source {
+			return nil, fmt.Errorf("invalid operation identity: service %q operationId %q merges %q and %q", service, opName, previous, source)
+		}
+		sources[service][opName] = source
+		opGroups[service][opName] = append(opGroups[service][opName], span)
+	}
+
 	// 为每个服务的每个操作生成 ServiceOperation
-    for service, ops := range opGroups {
-        var operations []ServiceOperation
-        used := map[string]bool{}
-        for opName, spanList := range ops {
-            // Simple collision handling: append _2, _3...
-            base := opName
-            c := 2
-            for used[opName] {
-                opName = fmt.Sprintf("%s_%d", base, c)
-                c++
-            }
-            used[opName] = true
-            op := generateServiceOperation(opName, spanList)
-            operations = append(operations, op)
-        }
-        serviceOps[service] = operations
-    }
-	
-	return serviceOps
+	for service, ops := range opGroups {
+		var operations []ServiceOperation
+		for opName, spanList := range ops {
+			op := generateServiceOperation(opName, spanList)
+			operations = append(operations, op)
+		}
+		serviceOps[service] = operations
+	}
+
+	return serviceOps, nil
 }
 
 // generateServiceOperation 从 span 列表生成单个 ServiceOperation
 func generateServiceOperation(opName string, spans []trace.Span) ServiceOperation {
 	preconditions := make(map[string]string)
 	postconditions := make(map[string]string)
-	
+
 	// 从所有相关 spans 的 attributes 中提取条件
 	for _, span := range spans {
 		for key, value := range span.Attributes {
@@ -140,7 +163,7 @@ func generateServiceOperation(opName string, spans []trace.Span) ServiceOperatio
 			}
 		}
 	}
-	
+
 	return ServiceOperation{
 		OperationId:    opName,
 		Description:    fmt.Sprintf("Auto-generated %s operation from trace", opName),
@@ -151,46 +174,46 @@ func generateServiceOperation(opName string, spans []trace.Span) ServiceOperatio
 
 // buildCELExpression 根据属性键值生成 CEL 表达式
 func buildCELExpression(key string, value interface{}) string {
-    keyLower := strings.ToLower(key)
+	keyLower := strings.ToLower(key)
 
-    // Special cases for common HTTP request attributes
-    if keyLower == "http.method" {
-        if s, ok := value.(string); ok && s != "" {
-            return fmt.Sprintf("http.method == '%s'", s)
-        }
-    }
-    if keyLower == "http.route" || keyLower == "http.target" {
-        if s, ok := value.(string); ok && s != "" {
-            return fmt.Sprintf("http.route == '%s'", s)
-        }
-    }
+	// Special cases for common HTTP request attributes
+	if keyLower == "http.method" || keyLower == "http.request.method" {
+		if s, ok := value.(string); ok && s != "" {
+			return fmt.Sprintf("span.attributes[%q] == %q", key, s)
+		}
+	}
+	if keyLower == "http.route" || keyLower == "http.target" || keyLower == "http.url" || keyLower == "url.path" {
+		if s, ok := value.(string); ok && s != "" {
+			return fmt.Sprintf("span.attributes[%q] == %q", key, s)
+		}
+	}
 
-    // 状态码检查
-    if isStatusAttribute(key, value) {
-        switch v := value.(type) {
-        case int:
-            return fmt.Sprintf("response.status == %d", v)
-        case int64:
-            return fmt.Sprintf("response.status == %d", int(v))
-        case float64:
-            return fmt.Sprintf("response.status == %d", int(v))
-        }
-    }
-	
+	// 状态码检查
+	if isStatusAttribute(key, value) {
+		switch v := value.(type) {
+		case int:
+			return fmt.Sprintf("response.status == %d", v)
+		case int64:
+			return fmt.Sprintf("response.status == %d", int(v))
+		case float64:
+			return fmt.Sprintf("response.status == %d", int(v))
+		}
+	}
+
 	// Bearer token 检查
 	if isBearerToken(key, value) {
-		return "request.headers.authorization =~ /Bearer .+/"
+		return fmt.Sprintf("span.attributes[%q].matches(\"Bearer .+\")", key)
 	}
-	
+
 	// 字符串非空检查
 	if strVal, ok := value.(string); ok && strVal != "" {
 		if strings.Contains(keyLower, "request") || strings.Contains(keyLower, "body") {
-			return fmt.Sprintf("request.body.%s != \"\"", extractFieldName(key))
+			return fmt.Sprintf("span.attributes[%q] != \"\"", key)
 		} else if strings.Contains(keyLower, "response") {
-			return fmt.Sprintf("response.body.%s != \"\"", extractFieldName(key))
+			return fmt.Sprintf("span.attributes[%q] != \"\"", key)
 		}
 	}
-	
+
 	return ""
 }
 
@@ -198,7 +221,7 @@ func buildCELExpression(key string, value interface{}) string {
 func isStatusAttribute(key string, value interface{}) bool {
 	keyLower := strings.ToLower(key)
 	statusPatterns := []string{"status", "statuscode", "http.status_code", "response.status"}
-	
+
 	for _, pattern := range statusPatterns {
 		if strings.Contains(keyLower, pattern) {
 			// 检查值是否为数字类型
@@ -222,9 +245,9 @@ func isBearerToken(key string, value interface{}) bool {
 }
 
 func isRequestAttribute(key string) bool {
-    keyLower := strings.ToLower(key)
-    requestPatterns := []string{"request.", "http.method", "http.url", "http.route", "http.target"}
-	
+	keyLower := strings.ToLower(key)
+	requestPatterns := []string{"request.", "http.method", "http.url", "http.route", "http.target", "url.path"}
+
 	for _, pattern := range requestPatterns {
 		if strings.Contains(keyLower, pattern) {
 			return true
@@ -235,8 +258,8 @@ func isRequestAttribute(key string) bool {
 
 func isResponseAttribute(key string) bool {
 	keyLower := strings.ToLower(key)
-	responsePatterns := []string{"response.", "http.status_code"}
-	
+	responsePatterns := []string{"response.", "http.status_code", "http.response.status_code"}
+
 	for _, pattern := range responsePatterns {
 		if strings.Contains(keyLower, pattern) {
 			return true
@@ -263,17 +286,6 @@ func normalizeServiceName(name string) string {
 	// 规范化服务名，用于文件名
 	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 	return reg.ReplaceAllString(name, "_")
-}
-
-// normalizeOperationName is kept for backward compatibility but now delegates to
-// a simple sanitizer used only as fallback by ComputeOperationID.
-func normalizeOperationName(name string) string {
-    reg := regexp.MustCompile(`[^a-zA-Z0-9]`)
-    clean := reg.ReplaceAllString(name, "")
-    if len(clean) > 0 {
-        return strings.ToLower(clean[:1]) + clean[1:]
-    }
-    return clean
 }
 
 func normalizeIdentifier(name string) string {

@@ -4,14 +4,15 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
@@ -35,34 +36,54 @@ func runBaselineRecord(args []string) {
 	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
 	tracePath := fs.String("trace", "", "trace.json path")
 	outputPath := fs.String("out", "baseline.json", "baseline output file path")
+	semantic := fs.Bool("semantic", true, "Enable semantic validation (CEL)")
+	causality := fs.String("causality", "temporal", "Causality mode: strict|temporal|off")
+	tolerance := fs.Int64("causality-tolerance", 50, "Causality tolerance in milliseconds")
+	limits := resourceFlags(fs)
 	_ = fs.Parse(args)
+	if err := checkResourceFlags(*limits); err != nil {
+		exitErr(err)
+	}
+	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causality, ToleranceMs: *tolerance, Limits: *limits}
+	if err := config.Validate(); err != nil {
+		exitErr(err)
+	}
 
 	if *tracePath == "" {
 		exitErr(fmt.Errorf("--trace parameter is required"))
 	}
 
 	// Load and validate flow specification
-	flow, opIndex, err := loadAndValidateFlow(*flowPath)
+	files := input.NewSnapshotWithLimit(nil, limits.MaxInputBytes)
+	contract, err := loadAndValidateContract(*flowPath, files)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Load trace data
-	tr, err := trace.LoadFromFile(*tracePath)
+	tr, traceHash, err := loadTraceWithLimits(*tracePath, files, *limits)
 	if err != nil {
 		exitErr(err)
 	}
 
 	// Perform validation to get results
-	results, ok := validate.ValidateAgainstTrace(flow, opIndex, tr)
+	results, ok := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr, config)
 	if !ok {
 		fmt.Fprintln(os.Stderr, "Validation failed; baseline not recorded.")
 		os.Exit(exitcode.ValidationFailed)
 	}
 
 	// Record baseline
-	baselineData, err := baseline.RecordBaseline(flow, results, *flowPath)
+	provenance, err := executionIdentity(tr, traceHash, config, files)
 	if err != nil {
+		exitErr(err)
+	}
+	baselineData, err := baseline.RecordBaseline(contract, results, provenance)
+	if err != nil {
+		if errors.Is(err, baseline.ErrIncompleteValidation) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(exitcode.ValidationFailed)
+		}
 		exitErr(fmt.Errorf("failed to record baseline: %w", err))
 	}
 
@@ -80,15 +101,22 @@ func runBaselineRecord(args []string) {
 
 // loadAndValidateFlow loads flow spec and validates it
 func loadAndValidateFlow(flowPath string) (*spec.FlowSpec, map[string]map[string]spec.ServiceOperation, error) {
-	flow, err := spec.LoadFlowSpec(flowPath)
+	contract, err := loadAndValidateContract(flowPath, input.NewSnapshot(nil))
 	if err != nil {
 		return nil, nil, err
 	}
+	return contract.Flow, contract.Operations, nil
+}
 
-	_, opIndex, err := flow.BuildOperationIndex(flowPath)
+func loadAndValidateContract(flowPath string, files *input.Snapshot) (*spec.ContractSnapshot, error) {
+	contract, issues, err := loadContractWithFiles(flowPath, true, files)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	return flow, opIndex, nil
+	for _, issue := range issues {
+		if issue.Level == "ERROR" {
+			return nil, fmt.Errorf("invalid contract: %s", issue.Msg)
+		}
+	}
+	return contract, nil
 }

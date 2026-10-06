@@ -1,0 +1,38 @@
+{
+  "info": {
+    "title": "Dependency conservation"
+  },
+  "services": {
+    "svc": {
+      "spec": "./svc.yaml"
+    }
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "A",
+        "call": "svc.a"
+      },
+      {
+        "id": "B",
+        "call": "svc.b",
+        "depends": [
+          "A"
+        ]
+      },
+      {
+        "id": "C",
+        "call": "svc.c",
+        "depends": [
+          "A"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": "A",
+        "to": "C"
+      }
+    ]
+  }
+}

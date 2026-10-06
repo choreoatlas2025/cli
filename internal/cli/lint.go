@@ -9,7 +9,7 @@ import (
 	"os"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
-	"github.com/choreoatlas2025/cli/internal/schemas"
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
@@ -18,46 +18,23 @@ func runLint(args []string) {
 	fs := flag.NewFlagSet("lint", flag.ExitOnError)
 	flowPath := fs.String("flow", ".flowspec.yaml", "FlowSpec file path")
 	useSchema := fs.Bool("schema", true, "Enable JSON Schema strict validation")
+	limits := resourceFlags(fs)
 	_ = fs.Parse(args)
+	if err := checkResourceFlags(*limits); err != nil {
+		exitErr(err)
+	}
 
-	// JSON Schema validation (if enabled)
+	contract, issues, err := loadContractWithFiles(*flowPath, *useSchema, input.NewSnapshotWithLimit(nil, limits.MaxInputBytes))
+	if err != nil {
+		exitErr(err)
+	}
+	config := spec.DefaultValidationConfig()
+	config.Limits = *limits
+	if _, err := validate.CompilePlan(contract.Flow, contract.Operations, config); err != nil {
+		exitErr(err)
+	}
 	if *useSchema {
-		// FlowSpec schema validation (using embedded schema for robustness)
-		if err := spec.ValidateYAMLWithSchemaFS(*flowPath, schemas.FS, "flowspec.schema.json"); err != nil {
-			// Fallback to file path method
-			if err := spec.ValidateYAMLWithSchema(*flowPath, "schemas/flowspec.schema.json"); err != nil {
-				exitErr(fmt.Errorf("FlowSpec structure validation failed: %w", err))
-			}
-		}
-		fmt.Println("[SCHEMA] FlowSpec structure validation passed")
-	}
-
-	flow, err := spec.LoadFlowSpec(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-
-	// ServiceSpec schema validation (if enabled)
-	if *useSchema {
-		for alias, bind := range flow.Services {
-			serviceSpecPath := spec.ResolvePath(*flowPath, bind.Spec)
-			// Using embedded schema for robustness
-			if err := spec.ValidateYAMLWithSchemaFS(serviceSpecPath, schemas.FS, "servicespec.schema.json"); err != nil {
-				// Fallback to file path method
-				if err := spec.ValidateYAMLWithSchema(serviceSpecPath, "schemas/servicespec.schema.json"); err != nil {
-					exitErr(fmt.Errorf("ServiceSpec structure validation failed (%s): %w", alias, err))
-				}
-			}
-		}
-		fmt.Println("[SCHEMA] ServiceSpec structure validation passed")
-	}
-	_, opIndex, err := flow.BuildOperationIndex(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-	issues, err := validate.LintFlow(*flowPath, flow, opIndex)
-	if err != nil {
-		exitErr(err)
+		fmt.Println("[SCHEMA] Contract structure validation passed")
 	}
 
 	if len(issues) == 0 {

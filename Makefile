@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 PROJECT_PKG := github.com/choreoatlas2025/cli
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS     := -s -w -X '$(PROJECT_PKG)/internal/cli.Version=$(VERSION)' -X '$(PROJECT_PKG)/internal/cli.BuildEdition=ce'
+GIT_COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+LDFLAGS     := -s -w -X '$(PROJECT_PKG)/internal/cli.Version=$(VERSION)' -X '$(PROJECT_PKG)/internal/cli.GitCommit=$(GIT_COMMIT)' -X '$(PROJECT_PKG)/internal/cli.BuildEdition=ce' -X '$(PROJECT_PKG)/internal/cli.BuildChannel=make'
 BIN         := bin/choreoatlas
+GOLANGCI_LINT ?= golangci-lint
 
 .PHONY: help build test lint clean deps run-example
 
@@ -28,7 +30,7 @@ test:
 	go test ./...
 
 lint:
-	golangci-lint run || true
+	$(GOLANGCI_LINT) run --timeout=5m
 
 deps:
 	@echo "Installing dependencies..."

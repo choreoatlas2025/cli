@@ -11,9 +11,9 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
-	"github.com/choreoatlas2025/cli/internal/report/html"
+	"github.com/choreoatlas2025/cli/internal/input"
+	"github.com/choreoatlas2025/cli/internal/result"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
 
@@ -27,28 +27,39 @@ func runValidate(args []string) {
 	baselinePath := fs.String("baseline", "", "Baseline file path")
 	thresholdSteps := fs.Float64("threshold-steps", 0.9, "Step coverage threshold")
 	thresholdConds := fs.Float64("threshold-conds", 0.95, "Condition pass rate threshold")
+	maxStepsDegradation := fs.Float64("max-steps-degradation", 0, "Maximum relative step coverage degradation with a baseline (0..1)")
+	maxCondsDegradation := fs.Float64("max-conds-degradation", 0, "Maximum relative condition pass rate degradation with a baseline (0..1)")
 	skipAsFail := fs.Bool("skip-as-fail", false, "Treat SKIP conditions as FAIL")
 	causalityMode := fs.String("causality", "temporal", "Causality check mode: strict|temporal|off (default: temporal)")
 	causalityTolerance := fs.Int("causality-tolerance", 50, "Causality constraint tolerance in milliseconds (default: 50ms)")
 	baselineMissing := fs.String("baseline-missing", "fail", "Baseline missing strategy: fail|treat-as-absolute")
+	limits := resourceFlags(fs)
 	_ = fs.Parse(args)
+	if err := checkResourceFlags(*limits); err != nil {
+		exitErr(err)
+	}
+	thresholds := baseline.ThresholdConfig{
+		StepsThreshold: *thresholdSteps, ConditionsThreshold: *thresholdConds,
+		MaxStepsDegradation: *maxStepsDegradation, MaxConditionsDegradation: *maxCondsDegradation, SkipAsFail: *skipAsFail,
+	}
+	if err := baseline.ValidateThresholds(thresholds); err != nil {
+		exitErr(err)
+	}
+	config := spec.ValidationConfig{Semantic: *semantic, Causality: *causalityMode, ToleranceMs: int64(*causalityTolerance), Limits: *limits}
+	if err := config.Validate(); err != nil {
+		exitErr(err)
+	}
+	if *baselineMissing != "fail" && *baselineMissing != "treat-as-absolute" {
+		exitErr(fmt.Errorf("invalid baseline-missing strategy: %s", *baselineMissing))
+	}
 
 	// Input parameter validation
 	if *tracePath == "" {
 		exitErr(errors.New("--trace parameter is required"))
 	}
 
-	flow, err := spec.LoadFlowSpec(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-	_, opIndex, err := flow.BuildOperationIndex(*flowPath)
-	if err != nil {
-		exitErr(err)
-	}
-
-	// lint 检查
-	issues, err := validate.LintFlow(*flowPath, flow, opIndex)
+	files := input.NewSnapshotWithLimit(nil, limits.MaxInputBytes)
+	contract, issues, err := loadContractWithFiles(*flowPath, true, files)
 	if err != nil {
 		exitErr(err)
 	}
@@ -63,62 +74,78 @@ func runValidate(args []string) {
 	}
 
 	// Load trace data
-	tr, err := trace.LoadFromFile(*tracePath)
+	tr, traceHash, err := loadTraceWithLimits(*tracePath, files, *limits)
 	if err != nil {
 		exitErr(err)
 	}
 
-	// Set semantic validation switch
-	validate.EnableSemantic = *semantic
-
-	// Set causality check mode
-	switch validate.CausalityMode(*causalityMode) {
-	case validate.CausalityStrict:
-		validate.GlobalCausalityMode = validate.CausalityStrict
-	case validate.CausalityTemporal:
-		validate.GlobalCausalityMode = validate.CausalityTemporal
-	case validate.CausalityOff:
-		validate.GlobalCausalityMode = validate.CausalityOff
-	default:
-		exitErr(fmt.Errorf("Invalid causality mode: %s, supported modes: strict|temporal|off", *causalityMode))
-	}
-
-	// Set causality tolerance
-	validate.GlobalCausalityToleranceMs = int64(*causalityTolerance)
-
-	results, ok := validate.ValidateAgainstTrace(flow, opIndex, tr)
-
 	// Baseline gate check
 	var gateResult *baseline.GateResult
 	var baselineData *baseline.BaselineData
+	var baselineHash string
 	baselineExpected := *baselinePath != ""
 
 	if baselineExpected {
 		// Load baseline for comparison
 		var err error
-		baselineData, err = baseline.LoadBaseline(*baselinePath)
+		baselineFile, readErr := files.Read(*baselinePath)
+		err = readErr
+		if readErr == nil {
+			baselineData, err = baseline.ParseBaseline(baselineFile.Bytes())
+			baselineHash = baselineFile.Hash()
+		}
 		if err != nil {
 			// Handle baseline missing according to strategy
 			if *baselineMissing == "fail" {
-				exitErr(fmt.Errorf("Failed to load baseline file %s: %w", *baselinePath, err))
-			} else if *baselineMissing == "treat-as-absolute" {
+				exitErr(fmt.Errorf("failed to load baseline file %s: %w", *baselinePath, err))
+			} else if errors.Is(err, os.ErrNotExist) {
 				fmt.Printf("[WARN] Baseline file not available, falling back to absolute threshold mode: %v\n", err)
 				baselineData = nil
-				baselineExpected = false
+			} else {
+				exitErr(err)
 			}
+		}
+		if baselineData != nil {
+			if err := baseline.ValidateCompatibility(baselineData, contract); err != nil {
+				exitErr(err)
+			}
+		}
+	}
+	var execution spec.ExecutionIdentity
+	if baselineData != nil || (*reportFormat != "" && *reportOut != "") {
+		execution, err = executionIdentity(tr, traceHash, config, files)
+		if err != nil {
+			exitErr(err)
+		}
+		if baselineData != nil {
+			if err := baseline.ValidateExecution(baselineData, execution); err != nil {
+				exitErr(err)
+			}
+		}
+	}
+	plan, results, _ := validate.ValidateWithPlan(contract.Flow, contract.Operations, tr, config)
+	for _, result := range results {
+		for _, violation := range result.Violations {
+			fmt.Printf("[DAG Violation] %s: %s\n", violation.Type, violation.Message)
 		}
 	}
 
 	// Execute threshold gate (with optional baseline)
-	thresholds := baseline.ThresholdConfig{
-		StepsThreshold:      *thresholdSteps,
-		ConditionsThreshold: *thresholdConds,
-		SkipAsFail:          *skipAsFail,
-	}
 	gateResult = baseline.EvaluateGate(results, thresholds, baselineData)
+	outcome := result.Decision(results, gateResult)
 
 	// Generate report (if format and path specified)
 	if *reportFormat != "" && *reportOut != "" {
+		inputs := &result.InputBinding{Contract: contract.Identity(), TraceHash: execution.TraceHash, Version: execution.Version, GitCommit: execution.GitCommit, BuildChannel: execution.BuildChannel, Semantic: execution.Config.Semantic, Causality: execution.Config.Causality, ToleranceMs: execution.Config.ToleranceMs, ValidatorHash: execution.ValidatorHash, TraceIdentity: execution.TraceIdentity}
+		inputs.Policy = gateResult.Details
+		inputs.Limits = config.Limits
+		if plan != nil {
+			inputs.PlanHash = plan.Hash()
+		}
+		if baselineData != nil {
+			inputs.BaselineProvenance = &baselineData.Provenance
+			inputs.BaselineHash = baselineHash
+		}
 		var format ReportFormat
 		switch *reportFormat {
 		case "json":
@@ -128,21 +155,11 @@ func runValidate(args []string) {
 		case "html":
 			format = ReportHTML
 		default:
-			exitErr(fmt.Errorf("Unsupported report format: %s", *reportFormat))
+			exitErr(fmt.Errorf("unsupported report format: %s", *reportFormat))
 		}
 
-		// Convert baseline GateResult to html.GateResult for report
-		var htmlGateResult *html.GateResult
-		if gateResult != nil {
-			htmlGateResult = &html.GateResult{
-				Checked: gateResult.Checked,
-				Passed:  gateResult.Passed,
-				Details: gateResult.Details,
-			}
-		}
-
-		if err := WriteReport(*reportOut, format, results, tr.Spans, htmlGateResult); err != nil {
-			exitErr(fmt.Errorf("Failed to generate report: %w", err))
+		if err := WriteReport(*reportOut, format, results, tr.Spans, gateResult, inputs); err != nil {
+			exitErr(fmt.Errorf("failed to generate report: %w", err))
 		}
 		fmt.Printf("Report saved: %s (format: %s)\n", *reportOut, *reportFormat)
 	}
@@ -204,12 +221,9 @@ func runValidate(args []string) {
 	}
 
 	// Exit code determination: validation failure or gate failure should exit non-zero
-	if !ok {
-		os.Exit(exitcode.ValidationFailed) // Validation failed
+	if !outcome.Success {
+		os.Exit(outcomeExitCode(outcome))
 	}
-	if gateResult != nil && gateResult.Checked && !gateResult.Passed {
-		os.Exit(exitcode.GateFailed) // Gate failed
-	}
-	
+
 	fmt.Println("Validate: OK")
 }

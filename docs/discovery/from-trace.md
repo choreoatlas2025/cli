@@ -19,6 +19,27 @@ graph LR
    - FlowSpec defining the choreography
    - ServiceSpec files for each participating service
 
+Generation and schema/lint checks run in a temporary location before destination
+files are replaced. A validation failure leaves existing contracts unchanged.
+Outputs are prepared together; ordinary commit errors roll back completed file
+replacements. This also applies with `--no-validate`, which skips schema/lint checks
+but retains staged writes and rollback. ServiceSpec paths resolve relative to the
+generated FlowSpec, including when outputs use different directories.
+
+HTTP operation IDs and runtime matching use the same method/path identity.
+Discovery recognizes `http.method` or `http.request.method`, preferring
+`http.route`, then `url.path`, `http.target` and `http.url`. A name such as
+`GET /health` supplies missing method/path information; supplied attributes take
+precedence. Query strings and fragments do not change the operation ID. RPC
+operations use `rpc.method`; custom spans retain name-based matching.
+
+Distinct source operations that normalize to the same ID are rejected before
+writing contracts, rather than silently merged. Generated HTTP attribute
+conditions use `span.attributes["http.method"]` and equivalent exact keys;
+status conditions use `response.status`, including `http.response.status_code`.
+Generated conditions describe observed values and still need review before they
+become requirements.
+
 ## Basic Usage
 
 ```bash
@@ -54,7 +75,7 @@ The input trace.json should follow this structure:
       "service": "serviceName",
       "startNanos": 1000000,
       "endNanos": 2000000,
-      "tags": {
+      "attributes": {
         "http.status_code": 200,
         "response.body": {"key": "value"}
       }
@@ -75,7 +96,7 @@ The input trace.json should follow this structure:
       "service": "orderService",
       "startNanos": 1000,
       "endNanos": 2000,
-      "tags": {
+      "attributes": {
         "http.status_code": 201,
         "response.body": {
           "orderId": "ORD-123",
@@ -88,7 +109,7 @@ The input trace.json should follow this structure:
       "service": "inventoryService",
       "startNanos": 3000,
       "endNanos": 4000,
-      "tags": {
+      "attributes": {
         "http.status_code": 200,
         "response.body": {
           "available": true,
@@ -169,15 +190,15 @@ The current discovery implementation has these limitations:
 1. **Basic extraction**: Generates minimal contracts requiring manual refinement
 2. **Sequential flow only**: Doesn't detect parallel operations
 3. **No variable inference**: Variable references need manual adjustment
-4. **Simple conditions**: Only basic HTTP status code postconditions
-5. **No CEL generation**: Complex conditions must be added manually
+4. **Observed conditions**: HTTP method/path attributes and status checks reflect sampled values; they do not infer business invariants
+5. **No business-rule inference**: Complex conditions must be added manually
 
 ## Best Practices
 
 ### 1. Use Representative Traces
 - Include both success and failure scenarios
 - Cover all typical execution paths
-- Ensure traces contain complete tag data
+- Ensure traces contain complete attribute data
 
 ### 2. Iterative Refinement
 ```bash

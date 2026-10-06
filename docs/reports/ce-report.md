@@ -1,69 +1,69 @@
 # Baseline and Report Documentation
 
-## Overview
+## Final result
 
-The ChoreoAtlas CLI supports baseline comparison for tracking performance and validation quality over time. When a baseline is provided, the system switches from absolute threshold checking to relative comparison mode.
+Runtime validation and threshold policy have separate results. A failed step or
+evaluated CEL condition fails runtime validation with exit code `3`. Thresholds
+cannot override that failure. When runtime validation passes but the policy fails,
+the command exits `4`. Only both passing permits exit `0`.
 
-## Baseline Comparison Modes
+JSON and HTML expose the same final `success`, `status`, and `exitCode`, together
+with `validationPassed` and `gatePassed`. JUnit represents a failed policy as a
+failing test case, even when all runtime steps passed. Its `result.exitCode`
+property records the command decision. Coverage statistics remain diagnostics.
 
-### Absolute Mode (No Baseline)
-When no baseline is provided, thresholds are checked against absolute values:
-- Step coverage must meet the specified `--threshold-steps` (default 90%)
-- Condition pass rate must meet the specified `--threshold-conds` (default 95%)
+CEL compilation, non-boolean results and runtime errors are condition failures,
+with the error phase retained in the report. Unevaluated conditions cannot count
+as a successful runtime result, regardless of `--skip-as-fail` or threshold values.
 
-### Relative Mode (With Baseline)
-When a baseline is provided via `--baseline`, the system compares current metrics against the baseline:
-- Calculates delta percentages for both step coverage and condition pass rates
-- Thresholds now represent maximum allowed degradation
-- Example: `--threshold-steps 0.1` allows up to 10% degradation from baseline
+## Threshold policy
 
-## Report Fields
+Absolute floors apply with or without a baseline:
 
-### Standard Fields
-- `stepsTotal`: Total number of steps in the flow
-- `stepsPass`: Number of steps that passed validation
-- `stepsCoverage`: Percentage of steps covered (0.0-1.0)
-- `conditionsTotal`: Total number of conditions evaluated
-- `conditionsPass`: Number of conditions that passed
-- `conditionsRate`: Pass rate for conditions (0.0-1.0)
+- `--threshold-steps`: minimum step coverage, default `0.9`.
+- `--threshold-conds`: minimum condition pass rate, default `0.95`.
 
-### Baseline Fields (when baseline is provided)
-- `baselineStepsCoverage`: Step coverage from baseline
-- `stepsDeltaAbs`: Absolute difference in step coverage
-- `stepsDeltaPct`: Percentage change from baseline
-- `baselineConditionsRate`: Condition pass rate from baseline
-- `conditionsDeltaAbs`: Absolute difference in condition rate
-- `conditionsDeltaPct`: Percentage change from baseline
+With a baseline, additional limits apply:
 
-## Example Output
+- `--max-steps-degradation`: maximum relative coverage degradation, default `0`.
+- `--max-conds-degradation`: maximum relative condition rate degradation, default `0`.
 
-### Without Baseline
-```
-[GATE] Baseline Gate: PASSED ✓
-  Steps Coverage: 95.0% (>= 90.0%)
-  Conditions Pass Rate: 98.0% (>= 95.0%)
-```
+Relative degradation is `(baselineRate - currentRate) / baselineRate` for a
+positive baseline rate. The additional limits never replace absolute floors.
+All four values must be finite numbers between `0` and `1`. A step-level failure
+still fails runtime validation regardless of these settings.
+HTML displays the configured values, including `0`, without replacing them with
+the default thresholds.
 
-### With Baseline
-```
-[GATE] Baseline Gate: PASSED ✓
-  Steps Coverage: 93.0% (>= 90.0%)
-  Conditions Pass Rate: 96.0% (>= 95.0%)
-  Baseline Comparison:
-    Steps: 95.0% baseline → 93.0% current (delta: -2.1%)
-    Conditions: 98.0% baseline → 96.0% current (delta: -2.0%)
+```bash
+choreoatlas validate \
+  --flow order-flow.flowspec.yaml \
+  --trace traces/current.json \
+  --baseline baseline.json \
+  --threshold-steps 0.9 \
+  --threshold-conds 0.95 \
+  --max-steps-degradation 0.05 \
+  --max-conds-degradation 0.03
 ```
 
-## Baseline Missing Strategy
+## Baseline identity
 
-The `--baseline-missing` flag controls behavior when the specified baseline file cannot be loaded:
+`baseline record` accepts complete successful results only. Failed, missing,
+duplicate, or skipped condition results cannot be recorded as a successful
+baseline. Actual calls are counted, including parallel children; containers
+without a call do not inflate the count.
 
-- `fail` (default): Exit with an error if the baseline file cannot be loaded
-- `treat-as-absolute`: Fall back to absolute threshold mode with a warning
+Format `3` records the FlowSpec title and SHA-256, every referenced ServiceSpec's
+SHA-256, covered step identities, evaluated condition identities, and recording
+`provenance`: validator version, commit and binary hash, semantic/causality
+configuration, source trace hash and trace identity. Loading and
+comparison validate this data against the current contract. Changes to any bound
+contract file, including formatting changes, validator or validation configuration
+require recording a new baseline. Formats `1` and `2` lack complete recording
+identity and must be replaced. A new comparison trace is allowed; the recording
+trace hash describes the source of the baseline, rather than requiring reuse of
+the same trace. Recording validates the resulting baseline before writing it.
 
-## Usage Examples
-
-### Record a Baseline
 ```bash
 choreoatlas baseline record \
   --flow order-flow.flowspec.yaml \
@@ -71,21 +71,76 @@ choreoatlas baseline record \
   --out baseline.json
 ```
 
-### Validate with Baseline Comparison
-```bash
-choreoatlas validate \
-  --flow order-flow.flowspec.yaml \
-  --trace traces/current.json \
-  --baseline baseline.json \
-  --threshold-steps 0.05 \
-  --threshold-conds 0.03
-```
+`--baseline-missing fail` is the default. `treat-as-absolute` falls back only when
+the file does not exist; corrupt, unsupported, or incompatible baselines fail.
 
-### Handle Missing Baseline
-```bash
-choreoatlas validate \
-  --flow order-flow.flowspec.yaml \
-  --trace traces/current.json \
-  --baseline baseline.json \
-  --baseline-missing treat-as-absolute
-```
+## Report input binding
+
+Reports include the hashes of the FlowSpec, referenced ServiceSpecs, trace,
+consumed baseline, and validator binary, plus validator version, semantic and
+causality settings, and threshold policy. JSON and HTML use `inputs`; JUnit uses
+the JSON-valued `result.inputs` property. These bindings identify which inputs and
+rules produced a result; reports do not re-evaluate themselves after files change.
+
+Each invocation captures each cleaned absolute input path once. Schema checks,
+parsing, runtime validation, baseline compatibility/recording and report hashes
+use those captured bytes. Replacing or deleting a path after capture does not
+rebind that invocation's result; a later invocation reads the changed files.
+Referenced aliases with the same cleaned path share the capture. This is not an
+atomic snapshot across multiple files, and distinct symlink/hardlink paths are
+not deduplicated by physical file identity. Prevent concurrent writes when a
+consistent multi-file revision is required.
+
+`traceIdentity.binding` is `trace-id` when every span carries the same trace ID,
+`file-only` for legacy unlabelled inputs, and `invalid` in reports of rejected
+mixed or malformed identity inputs. Reports also expose the consumed baseline's
+recording context as `baselineProvenance`. No trace ID can be inferred from a
+file hash. These attributes remain part of native JSON; they do not add OTLP input.
+
+Baseline comparison details include `baselineStepsCoverage`, `stepsDeltaAbs`,
+`stepsDeltaPct`, `baselineConditionsRate`, `conditionsDeltaAbs`, and
+`conditionsDeltaPct`. Rate values are fractions between `0` and `1`; relative
+changes can exceed that interval when a rate improves from a small baseline.
+
+HTML inserts external step, condition, message, timeline and policy-violation
+fields as text nodes. Timeline tooltips use the DOM `title` property. These
+fields do not become HTML markup or event handlers. The repository's CI verifies
+this behavior against a Go-generated report in a real browser, together with
+zero-threshold rendering.
+
+The gate and all report formats use the shared `internal/result` model for
+input identity, outcome and coverage measurements. JSON/JUnit no longer depend
+on HTML model types. Existing report field names and units remain unchanged.
+A nominal PASS step with a failed or unevaluated condition is counted as failed,
+using the same predicate as the final outcome. SKIP steps retain their separate
+summary count; `uncoveredSteps` retains its legacy list of failed calls.
+
+## Output replacement and incomplete evidence
+
+JSON, JUnit, HTML and baseline outputs are staged beside their destination,
+flushed to disk, closed, then renamed into place. Existing regular-file
+permissions are retained; symlink and non-regular destinations are rejected.
+A failure before rename leaves the previous output untouched and removes the
+stage during normal cleanup. A directory-sync failure after rename explicitly
+says the new output is committed but its durability is unconfirmed. Inspect
+that output before retrying. POSIX builds sync the destination directory;
+Windows has no directory-sync guarantee through this implementation.
+
+An interrupted process can leave `.choreoatlas-stage-*` files beside the output.
+Before rename the old destination remains; after rename the destination contains
+the complete new file. Serialize writes and prevent destination changes during
+replacement: there is no writer lock or compare-and-swap policy. Rename/durability
+semantics depend on the destination filesystem; these local tests do not prove
+network-filesystem or power-loss behavior.
+
+Generated contract sets use synced stages and in-process rollback for ordinary
+errors. Their multiple renames are not a crash-atomic transaction. If interrupted,
+inspect the whole set, including stage/backup files, and rerun qualification before
+use. No cross-file recovery journal is supplied.
+
+Reports, baseline recording and baseline comparison require a readable executing
+binary. Tool identity is streamed and cached once per invocation, independently
+of customer input limits. An unavailable executable path or unreadable tool
+returns input error `2` with `evidence incomplete`; no new report/baseline replaces
+the old one. Ordinary validation without a report or consumed baseline can still
+run without binary identity. No substitute hash or `unknown` proof is invented.

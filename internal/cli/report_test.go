@@ -26,7 +26,7 @@ func TestCalculateCoverageSummary(t *testing.T) {
 		},
 		{
 			Step:   "失败步骤",
-			Call:   "serviceB.operation2", 
+			Call:   "serviceB.operation2",
 			Status: "FAIL",
 			Conditions: []validate.ConditionResult{
 				{Kind: "pre", Name: "条件3", Status: "FAIL"},
@@ -116,7 +116,7 @@ func TestWriteJSONReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeJSONReport failed: %v", err)
 	}
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	// 读取并验证生成的JSON
 	data, err := os.ReadFile(tempFile)
@@ -125,13 +125,13 @@ func TestWriteJSONReport(t *testing.T) {
 	}
 
 	var report struct {
-		Timestamp   time.Time                `json:"timestamp"`
-		TotalSteps  int                      `json:"totalSteps"`
-		PassedSteps int                      `json:"passedSteps"`
-		FailedSteps int                      `json:"failedSteps"`
-		Success     bool                     `json:"success"`
-		Steps       []validate.StepResult    `json:"steps"`
-		Summary     CoverageSummary          `json:"summary"`
+		Timestamp   time.Time             `json:"timestamp"`
+		TotalSteps  int                   `json:"totalSteps"`
+		PassedSteps int                   `json:"passedSteps"`
+		FailedSteps int                   `json:"failedSteps"`
+		Success     bool                  `json:"success"`
+		Steps       []validate.StepResult `json:"steps"`
+		Summary     CoverageSummary       `json:"summary"`
 	}
 
 	err = json.Unmarshal(data, &report)
@@ -174,7 +174,7 @@ func TestWriteJUnitReport(t *testing.T) {
 		},
 		{
 			Step:    "失败步骤",
-			Call:    "failService.failOp", 
+			Call:    "failService.failOp",
 			Status:  "FAIL",
 			Message: "测试失败消息",
 			Conditions: []validate.ConditionResult{
@@ -188,7 +188,7 @@ func TestWriteJUnitReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeJUnitReport failed: %v", err)
 	}
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	// 读取并验证生成的XML
 	data, err := os.ReadFile(tempFile)
@@ -232,7 +232,7 @@ func TestWriteJUnitReport(t *testing.T) {
 		t.Error("JUnit XML should contain conditions in system-out")
 	}
 
-	// 验证覆盖度摘要在最终的system-out中  
+	// 验证覆盖度摘要在最终的system-out中
 	if !strings.Contains(content, `"stepsTotal": 2`) {
 		t.Error("JUnit XML should contain coverage summary in system-out")
 	}
@@ -273,7 +273,7 @@ func TestWriteReportFormats(t *testing.T) {
 	if err != nil {
 		t.Errorf("WriteReport JSON failed: %v", err)
 	} else {
-		os.Remove(jsonFile)
+		_ = os.Remove(jsonFile)
 	}
 
 	// 测试JUnit格式
@@ -282,7 +282,7 @@ func TestWriteReportFormats(t *testing.T) {
 	if err != nil {
 		t.Errorf("WriteReport JUnit failed: %v", err)
 	} else {
-		os.Remove(xmlFile)
+		_ = os.Remove(xmlFile)
 	}
 
 	// 测试不支持的格式
@@ -290,7 +290,7 @@ func TestWriteReportFormats(t *testing.T) {
 	if err == nil {
 		t.Error("WriteReport should fail for unknown format")
 	}
-	if !strings.Contains(err.Error(), "Unsupported report format") {
+	if !strings.Contains(err.Error(), "unsupported report format") {
 		t.Errorf("Expected format error message, got: %v", err)
 	}
 }
@@ -300,7 +300,7 @@ func TestEmptyStepsReport(t *testing.T) {
 	var steps []validate.StepResult
 
 	summary := calculateCoverageSummary(steps)
-	
+
 	if summary.StepsTotal != 0 {
 		t.Errorf("Expected StepsTotal 0 for empty steps, got %d", summary.StepsTotal)
 	}
@@ -318,7 +318,7 @@ func TestServiceCoverageExtraction(t *testing.T) {
 		{Call: "service1.op2", Status: "PASS"},
 		{Call: "service2.op1", Status: "FAIL"},
 		{Call: "invalid.call.format", Status: "PASS"}, // 应该被忽略
-		{Call: "", Status: "PASS"}, // 应该被忽略
+		{Call: "", Status: "PASS"},                    // 应该被忽略
 	}
 
 	summary := calculateCoverageSummary(steps)
@@ -326,7 +326,7 @@ func TestServiceCoverageExtraction(t *testing.T) {
 	expectedServices := map[string]int{
 		"service1": 2,
 		"service2": 1,
-		"invalid": 1, // invalid.call.format被解析为invalid服务
+		"invalid":  1, // invalid.call.format被解析为invalid服务
 	}
 
 	if len(summary.ServiceCoverage) != len(expectedServices) {

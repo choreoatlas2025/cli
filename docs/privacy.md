@@ -15,6 +15,10 @@ Processing those attributes locally is separate from collecting product usage
 telemetry. Reports can contain data from your traces; control their storage and
 sharing as you would the original inputs.
 
+CE reads local trace JSON in its native `spans` format. It does not provide OTLP
+receivers, exporters, or direct OTLP JSON/protobuf import, and it does not collect
+live telemetry from your services.
+
 ## Network Isolation
 
 The CLI's local workflows require no outbound connections, license validation,

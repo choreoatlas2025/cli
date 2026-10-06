@@ -18,32 +18,36 @@ func ValidateYAMLWithSchemaFS(yamlPath string, fsys fs.FS, schemaName string) er
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", yamlPath, err)
 	}
+	return ValidateYAMLBytesWithSchemaFS(b, fsys, schemaName)
+}
+
+func ValidateYAMLBytesWithSchemaFS(b []byte, fsys fs.FS, schemaName string) error {
 	var data any
 	if err := yaml.Unmarshal(b, &data); err != nil {
 		return fmt.Errorf("failed to parse YAML: %w", err)
 	}
-	
+
 	// Compile schema
 	c := jsonschema.NewCompiler()
 	f, err := fsys.Open(schemaName)
 	if err != nil {
 		return fmt.Errorf("failed to open embedded schema %s: %w", schemaName, err)
 	}
-	defer f.Close()
-	
+	defer func() { _ = f.Close() }()
+
 	if err := c.AddResource(schemaName, f); err != nil {
 		return fmt.Errorf("failed to load embedded schema resource: %w", err)
 	}
-	
+
 	sch, err := c.Compile(schemaName)
 	if err != nil {
 		return fmt.Errorf("failed to compile embedded schema: %w", err)
 	}
-	
+
 	// Validate
 	if err := sch.Validate(data); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
-	
+
 	return nil
 }

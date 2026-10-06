@@ -5,12 +5,23 @@ package baseline
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
+	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
+	"gopkg.in/yaml.v3"
 )
+
+func testProvenance() spec.ExecutionIdentity {
+	return spec.ExecutionIdentity{
+		Version: "test", GitCommit: "test", ValidatorHash: "sha256:" + strings.Repeat("a", 64), TraceHash: "sha256:" + strings.Repeat("b", 64),
+		Config: spec.ValidationConfig{Semantic: true, Causality: "temporal", ToleranceMs: 50}, TraceIdentity: trace.Identity{Binding: "file-only"},
+	}
+}
 
 func TestRecordBaseline(t *testing.T) {
 	// Create a test flow spec
@@ -18,10 +29,11 @@ func TestRecordBaseline(t *testing.T) {
 		Info: spec.FlowInfo{
 			Title: "Test Flow",
 		},
+		Services: map[string]spec.ServiceBinding{"svc": {Spec: "svc.yaml"}},
 		Flow: []spec.FlowStep{
-			{Step: "step1"},
-			{Step: "step2"},
-			{Step: "step3"},
+			{Step: "step1", Call: "svc.step1"},
+			{Step: "step2", Call: "svc.step2"},
+			{Step: "step3", Call: "svc.step3"},
 		},
 	}
 
@@ -36,7 +48,7 @@ func TestRecordBaseline(t *testing.T) {
 			},
 		},
 		{
-			Step:   "step2", 
+			Step:   "step2",
 			Status: "PASS",
 			Conditions: []validate.ConditionResult{
 				{Kind: "post", Name: "cond3", Status: "FAIL"},
@@ -51,13 +63,38 @@ func TestRecordBaseline(t *testing.T) {
 	// Create temporary flow file
 	tempDir := t.TempDir()
 	flowPath := filepath.Join(tempDir, "test.flowspec.yaml")
-	err := os.WriteFile(flowPath, []byte("test content"), 0644)
+	data, err := yaml.Marshal(flowSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(flowPath, data, 0644)
 	if err != nil {
 		t.Fatalf("Failed to create temp flow file: %v", err)
 	}
+	service := spec.ServiceSpecFile{Service: "svc", Operations: []spec.ServiceOperation{
+		{OperationId: "step1", Postconditions: map[string]string{"cond1": "true", "cond2": "true"}},
+		{OperationId: "step2", Postconditions: map[string]string{"cond3": "true"}},
+		{OperationId: "step3"},
+	}}
+	data, err = yaml.Marshal(service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "svc.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	contract, err := spec.LoadContractSnapshot(flowPath, input.NewSnapshot(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Test recording baseline
-	baseline, err := RecordBaseline(flowSpec, results, flowPath)
+	// Failed or internally inconsistent results cannot become a baseline.
+	if _, err := RecordBaseline(contract, results, testProvenance()); err == nil {
+		t.Fatal("expected failed results to be rejected")
+	}
+	results[1].Conditions[0].Status = "PASS"
+	results[2].Status = "PASS"
+	baseline, err := RecordBaseline(contract, results, testProvenance())
 	if err != nil {
 		t.Fatalf("RecordBaseline failed: %v", err)
 	}
@@ -71,12 +108,12 @@ func TestRecordBaseline(t *testing.T) {
 		t.Errorf("Expected StepsTotal 3, got %d", baseline.StepsTotal)
 	}
 
-	if len(baseline.CoveredSteps) != 2 {
-		t.Errorf("Expected 2 covered steps, got %d", len(baseline.CoveredSteps))
+	if len(baseline.CoveredSteps) != 3 {
+		t.Errorf("Expected 3 covered steps, got %d", len(baseline.CoveredSteps))
 	}
 
 	// Verify covered steps contain the correct ones
-	expectedSteps := map[string]bool{"step1": true, "step2": true}
+	expectedSteps := map[string]bool{"step1": true, "step2": true, "step3": true}
 	for _, step := range baseline.CoveredSteps {
 		if !expectedSteps[step] {
 			t.Errorf("Unexpected covered step: %s", step)
@@ -98,17 +135,17 @@ func TestRecordBaseline(t *testing.T) {
 	}
 
 	step2Conditions := baseline.Conditions["step2"]
-	if step2Conditions["post:cond3"] != false {
-		t.Errorf("Expected step2 cond3 to be false, got %v", step2Conditions["post:cond3"])
+	if step2Conditions["post:cond3"] != true {
+		t.Errorf("Expected step2 cond3 to be true, got %v", step2Conditions["post:cond3"])
 	}
 }
 
 func TestEvaluateGate(t *testing.T) {
 	tests := []struct {
-		name        string
-		results     []validate.StepResult
-		thresholds  ThresholdConfig
-		expectPass  bool
+		name             string
+		results          []validate.StepResult
+		thresholds       ThresholdConfig
+		expectPass       bool
 		expectViolations int
 	}{
 		{
@@ -122,10 +159,10 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.9,
 			},
-			expectPass: true,
+			expectPass:       true,
 			expectViolations: 0,
 		},
 		{
@@ -137,10 +174,10 @@ func TestEvaluateGate(t *testing.T) {
 				{Step: "step2", Status: "FAIL"},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.5, // Lower threshold so conditions pass
 			},
-			expectPass: false,
+			expectPass:       false,
 			expectViolations: 1,
 		},
 		{
@@ -154,11 +191,11 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.9,
+				StepsThreshold:      0.9,
 				ConditionsThreshold: 0.9,
 			},
-			expectPass: false,
-			expectViolations: 1,
+			expectPass:       false,
+			expectViolations: 2,
 		},
 		{
 			name: "Skip as fail enabled",
@@ -168,12 +205,12 @@ func TestEvaluateGate(t *testing.T) {
 				}},
 			},
 			thresholds: ThresholdConfig{
-				StepsThreshold: 0.5,
+				StepsThreshold:      0.5,
 				ConditionsThreshold: 0.9,
-				SkipAsFail: true,
+				SkipAsFail:          true,
 			},
-			expectPass: false,
-			expectViolations: 1,
+			expectPass:       false,
+			expectViolations: 2,
 		},
 	}
 
@@ -186,7 +223,7 @@ func TestEvaluateGate(t *testing.T) {
 			}
 
 			if len(result.Violations) != tt.expectViolations {
-				t.Errorf("Expected %d violations, got %d: %v", 
+				t.Errorf("Expected %d violations, got %d: %v",
 					tt.expectViolations, len(result.Violations), result.Violations)
 			}
 
@@ -204,14 +241,16 @@ func TestEvaluateGate(t *testing.T) {
 
 func TestSaveAndLoadBaseline(t *testing.T) {
 	baseline := &BaselineData{
-		SchemaVersion: "1",
+		SchemaVersion: "3",
+		Provenance:    testProvenance(),
 		FlowID:        "Test Flow",
-		FlowHash:      "sha256:abc123",
+		FlowHash:      "sha256:" + strings.Repeat("a", 64),
+		ServiceHashes: map[string]string{},
 		GeneratedAt:   time.Now().UTC(),
 		StepsTotal:    3,
-		CoveredSteps:  []string{"step1", "step2"},
+		CoveredSteps:  []string{"step1", "step2", "step3"},
 		Conditions: map[string]map[string]bool{
-			"step1": {"post:cond1": true, "post:cond2": false},
+			"step1": {"post:cond1": true, "post:cond2": true},
 		},
 	}
 
@@ -240,7 +279,7 @@ func TestSaveAndLoadBaseline(t *testing.T) {
 	}
 
 	if len(loadedBaseline.CoveredSteps) != len(baseline.CoveredSteps) {
-		t.Errorf("CoveredSteps length mismatch: expected %d, got %d", 
+		t.Errorf("CoveredSteps length mismatch: expected %d, got %d",
 			len(baseline.CoveredSteps), len(loadedBaseline.CoveredSteps))
 	}
 
@@ -250,22 +289,22 @@ func TestSaveAndLoadBaseline(t *testing.T) {
 	}
 
 	step1Conds := loadedBaseline.Conditions["step1"]
-	if step1Conds["post:cond1"] != true || step1Conds["post:cond2"] != false {
+	if step1Conds["post:cond1"] != true || step1Conds["post:cond2"] != true {
 		t.Errorf("Conditions not loaded correctly")
 	}
 }
 
 func TestDefaultThresholds(t *testing.T) {
 	thresholds := DefaultThresholds()
-	
+
 	if thresholds.StepsThreshold != 0.9 {
 		t.Errorf("Expected default StepsThreshold 0.9, got %f", thresholds.StepsThreshold)
 	}
-	
+
 	if thresholds.ConditionsThreshold != 0.95 {
 		t.Errorf("Expected default ConditionsThreshold 0.95, got %f", thresholds.ConditionsThreshold)
 	}
-	
+
 	if thresholds.SkipAsFail != false {
 		t.Errorf("Expected default SkipAsFail false, got %v", thresholds.SkipAsFail)
 	}

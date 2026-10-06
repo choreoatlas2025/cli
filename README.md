@@ -9,7 +9,7 @@
 
 Map. Verify. Steer your cross-service choreography — a developer-friendly, Swiss‑army‑knife style CLI for Contract‑as‑Code.
 
-This is the Community Edition (CE): zero telemetry, fully offline.
+This is the Community Edition (CE): zero product usage telemetry, fully offline.
 
 ---
 
@@ -101,6 +101,16 @@ choreoatlas validate --trace traces/successful-order.trace.json
 - `init` generates FlowSpec, ServiceSpec, starter trace files, and optional GitHub Actions workflow in the current directory.
 - Pass `--trace your-trace.json` to bootstrap from an existing trace.
 - Use `--ci minimal|combo` to inject `.github/workflows/choreoatlas.yml`.
+
+`init` renders the complete set before replacing files. Both FlowSpec copies,
+ServiceSpecs and references pass the same schema/lint checks as normal input;
+native trace samples and workflow YAML are parsed before commit. These checks
+do not prove business rules or that a generated workflow has run successfully.
+Quoted and multiline titles are serialized as YAML. Conflicts without `--force`
+leave existing files intact. With `--force`, ordinary commit failures roll back
+the entire set, including selected examples and workflows; this is not a
+cross-directory crash transaction. Trace mode parses and copies the same
+captured bytes and requires complete timestamps for ordering.
 
 ### Basic Usage
 
@@ -331,6 +341,8 @@ choreoatlas validate
   --baseline-missing string  Strategy when baseline missing: fail|treat-as-absolute (default "fail")
   --threshold-steps float    Step coverage threshold (default 0.9)
   --threshold-conds float    Condition pass threshold (default 0.95)
+  --max-steps-degradation float  Maximum relative coverage degradation with baseline (default 0)
+  --max-conds-degradation float  Maximum relative condition rate degradation with baseline (default 0)
   --skip-as-fail        Treat SKIP conditions as FAIL
   --report-format string Report format: json|junit|html (optional)
   --report-out string    Report output path (required when using --report-format)
@@ -474,6 +486,10 @@ The default build provides local dual-contract discovery and validation, tempora
 and causal checks, DAG support, HTML/JSON/JUnit reports, and basic baseline gates.
 All validation inputs and generated reports remain local. Builds and reports
 identify themselves as CE.
+
+CE accepts local trace JSON with a top-level `spans` array. It does not provide
+OTLP receivers, exporters, or direct OTLP file import. See the
+[trace input format](docs/reference/cli/validate.md#trace-input-format).
 
 See [DECISIONS.md](DECISIONS.md) for the repository's scope and maintenance rules.
 

@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 
 	"github.com/choreoatlas2025/cli/internal/spec"
@@ -16,7 +15,7 @@ import (
 
 // 条件结果
 type ConditionResult struct {
-	Kind    string `json:"kind"`    // "pre" | "post"
+	Kind    string `json:"kind"` // "pre" | "post"
 	Name    string `json:"name"`
 	Expr    string `json:"expr"`
 	Status  string `json:"status"`  // "PASS" | "FAIL" | "SKIP"
@@ -25,21 +24,32 @@ type ConditionResult struct {
 
 // 将 FlowSpec 的 input + span.attributes 投影为 CEL 环境可用的变量
 // 约定：
-// - request: 来自 step.input（会做 ${var} 的占位保留，不做替换以免误导，可后续扩展变量解引用）
-// - response: 从 span.attributes 映射（response.status 优先取：response.status|http.status_code|statusCode）
+// - request: declared input, with typed references resolved from preceding outputs
+// - response: 从 span.attributes 映射，优先使用 response.status，再使用 HTTP 状态码
 // - span: { name, service, attributes }
-// - vars: 从前序步骤输出收集（可选，当前为占位）
+// - vars: validated outputs visible to this step
 func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any) (map[string]any, error) {
-	// request 直接采用 FlowSpec 中的 input 原样
+	// Resolve declared input without treating missing variables as literal strings.
 	request := map[string]any{}
 	if step.Input != nil {
-		request["body"] = step.Input // 约定 input 即 body，满足大多数 REST 场景
+		input := resolveInput(step.Input, vars).(map[string]any)
+		structured := false
+		for _, key := range []string{"body", "path", "query", "headers"} {
+			if _, ok := input[key]; ok {
+				structured = true
+			}
+		}
+		if structured {
+			request = input
+		} else {
+			request["body"] = input
+		}
 	}
 
 	// 响应投影：尽量从 attributes 推断出 response.status / response.body
 	response := map[string]any{}
 	// 提取 status
-	statusKeys := []string{"response.status", "http.status_code", "statusCode"}
+	statusKeys := []string{"response.status", "http.response.status_code", "http.status_code", "statusCode"}
 	var status any
 	for _, k := range statusKeys {
 		if v, ok := sp.Attributes[k]; ok {
@@ -89,33 +99,10 @@ func normalizeExpr(e string) string {
 	})
 }
 
-func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
-	e := normalizeExpr(expr)
-
-	// 使用新版 CEL API 创建环境
-	celEnv, err := cel.NewEnv(
-		cel.Variable("request", cel.DynType),
-		cel.Variable("response", cel.DynType),
-		cel.Variable("span", cel.DynType),
-		cel.Variable("vars", cel.DynType),
-	)
+func (e *evaluation) boolean(expr string, envVars map[string]any) (bool, string, error) {
+	out, phase, err := e.value(expr, envVars)
 	if err != nil {
-		return false, "", fmt.Errorf("create cel env: %w", err)
-	}
-
-	ast, issues := celEnv.Compile(e)
-	if issues != nil && issues.Err() != nil {
-		return false, "compile", issues.Err()
-	}
-
-	prg, err := celEnv.Program(ast)
-	if err != nil {
-		return false, "program", err
-	}
-
-	out, _, err := prg.Eval(envVars)
-	if err != nil {
-		return false, "runtime", err
+		return false, phase, err
 	}
 	if out.Type() == types.BoolType {
 		return out.Value().(bool), "", nil
@@ -127,9 +114,10 @@ func evalCELBool(expr string, envVars map[string]any) (bool, string, error) {
 	return false, "type", fmt.Errorf("expr result not bool: %T", out.Value())
 }
 
-// EvaluateConditions 对某一步骤的 pre/postconditions 进行求值
-// 说明：编译错误/不支持表达式 -> SKIP，不计为失败
-func EvaluateConditions(
+// conditions evaluates a step's pre/postconditions in stable name order.
+// Declared conditions must evaluate successfully to a boolean. Evaluation
+// errors are failures, not skipped evidence.
+func (e *evaluation) conditions(
 	step spec.FlowStep,
 	op spec.ServiceOperation,
 	sp trace.Span,
@@ -142,12 +130,14 @@ func EvaluateConditions(
 	envVars, _ := buildEvalEnvForStep(step, sp, vars)
 
 	// 预条件
-	for name, expr := range op.Preconditions {
-		ok, phase, err := evalCELBool(expr, envVars)
+	for _, name := range sortedKeys(op.Preconditions) {
+		expr := op.Preconditions[name]
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
-			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
+			cr.Status = "FAIL"
+			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
+			passAll = false
 		} else if ok {
 			cr.Status = "PASS"
 		} else {
@@ -159,12 +149,14 @@ func EvaluateConditions(
 	}
 
 	// 后置条件
-	for name, expr := range op.Postconditions {
-		ok, phase, err := evalCELBool(expr, envVars)
+	for _, name := range sortedKeys(op.Postconditions) {
+		expr := op.Postconditions[name]
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
-			cr.Status = "SKIP"
-			cr.Message = fmt.Sprintf("unsupported or compilation failed (%s): %v", phase, err)
+			cr.Status = "FAIL"
+			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
+			passAll = false
 		} else if ok {
 			cr.Status = "PASS"
 		} else {

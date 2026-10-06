@@ -1,0 +1,28 @@
+{
+  "info": {
+    "title": "Exact numeric identity"
+  },
+  "services": {
+    "svc": {
+      "spec": "./svc.yaml"
+    }
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "Create",
+        "call": "svc.a",
+        "output": {
+          "identifier": "response.body.id"
+        }
+      },
+      {
+        "id": "Use",
+        "call": "svc.b",
+        "depends": [
+          "Create"
+        ]
+      }
+    ]
+  }
+}

@@ -29,7 +29,7 @@ func ValidateYAMLWithSchema(yamlPath, schemaPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open schema file %s: %w", schemaPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	schemaID := filepath.Base(schemaPath)
 	if err := c.AddResource(schemaID, f); err != nil {

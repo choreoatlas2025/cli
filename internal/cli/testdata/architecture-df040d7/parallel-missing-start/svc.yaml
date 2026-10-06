@@ -1,0 +1,17 @@
+{
+  "service": "svc",
+  "operations": [
+    {
+      "operationId": "a",
+      "postconditions": {
+        "ok": "true"
+      }
+    },
+    {
+      "operationId": "b",
+      "postconditions": {
+        "ok": "true"
+      }
+    }
+  ]
+}

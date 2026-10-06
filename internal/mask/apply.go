@@ -46,7 +46,7 @@ func applyMaskingRules(policy *CompiledPolicy, service, operation, key string, v
 			return applyMaskingToValue(value, rule.Strategy, path)
 		}
 	}
-	
+
 	// 如果是复合对象，递归处理
 	return applyMaskingToValue(value, Strategy{}, path)
 }
@@ -146,11 +146,11 @@ func ApplyToSpan(policy *CompiledPolicy, span trace.Span) trace.Span {
 // MaskJSON 对 JSON 数据应用脱敏策略（用于测试和调试）
 func MaskJSON(policy *CompiledPolicy, service, operation string, data map[string]any) map[string]any {
 	masked := make(map[string]any)
-	
+
 	for key, value := range data {
 		masked[key] = applyMaskingRules(policy, service, operation, key, value, []string{key})
 	}
-	
+
 	return masked
 }
 
@@ -185,7 +185,7 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 
 		fmt.Printf("\nSpan: %s.%s\n", span.Service, span.Name)
 		fmt.Println("Original data:")
-		
+
 		// 格式化输出原始 attributes
 		originalJSON, _ := json.MarshalIndent(span.Attributes, "  ", "  ")
 		fmt.Printf("  %s\n", originalJSON)
@@ -193,7 +193,7 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 		// 应用脱敏
 		maskedSpan := ApplyToSpan(policy, span)
 		fmt.Println("After masking:")
-		
+
 		maskedJSON, _ := json.MarshalIndent(maskedSpan.Attributes, "  ", "  ")
 		fmt.Printf("  %s\n", maskedJSON)
 
@@ -208,21 +208,21 @@ func ShowMaskingPreview(policy *CompiledPolicy, tr *trace.Trace, maxSpans int) {
 // GetMaskingStats 获取脱敏统计信息
 func GetMaskingStats(policy *CompiledPolicy, tr *trace.Trace) MaskingStats {
 	stats := MaskingStats{
-		TotalSpans:      len(tr.Spans),
-		TotalAttributes: 0,
+		TotalSpans:       len(tr.Spans),
+		TotalAttributes:  0,
 		MaskedAttributes: 0,
-		RulesApplied:    make(map[string]int),
+		RulesApplied:     make(map[string]int),
 	}
 
 	for _, span := range tr.Spans {
 		for key := range span.Attributes {
 			stats.TotalAttributes++
-			
+
 			// 检查是否被脱敏
 			for _, rule := range policy.Rules {
 				if matchesSelector(rule.Selector, span.Service, span.Name, key, []string{key}) {
 					stats.MaskedAttributes++
-					
+
 					// 统计规则应用次数
 					ruleKey := fmt.Sprintf("%s-%s", rule.Selector.Service, rule.Strategy.Type)
 					if rule.Selector.Service == "" {
@@ -262,7 +262,7 @@ func DeepCopy(src any) any {
 // copyRecursive 递归拷贝
 func copyRecursive(original, copy reflect.Value) {
 	switch original.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if !original.IsNil() {
 			copy.Set(reflect.New(original.Elem().Type()))
 			copyRecursive(original.Elem(), copy.Elem())

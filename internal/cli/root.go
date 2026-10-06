@@ -4,14 +4,17 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/spec"
+	"gopkg.in/yaml.v3"
 )
 
 // Execute runs the CLI command
@@ -118,17 +121,42 @@ var (
 	Version      = "0.8.0-dev"
 	GitCommit    = "unknown"
 	BuildTime    = "unknown"
+	BuildChannel = "source"
 	BuildEdition = "ce" // CE版本标识
 )
 
 func runVersion(args []string) {
-	// Display version with -ce suffix
-	fmt.Printf("choreoatlas v%s-ce\n", Version)
+	fmt.Printf("choreoatlas %s\n", formatCEVersion(Version))
 	fmt.Printf("Edition: Community Edition (CE)\n")
 	fmt.Printf("Git Commit: %s\n", GitCommit)
 	fmt.Printf("Build Time: %s\n", BuildTime)
+	fmt.Printf("Build Channel: %s\n", BuildChannel)
 	fmt.Printf("Go Version: %s\n", runtime.Version())
 	fmt.Printf("Platform: %s\n", fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH))
+}
+
+// formatCEVersion preserves release tags and git-describe metadata while adding
+// the version prefix and CE identifier only when missing.
+func formatCEVersion(version string) string {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if version == "" {
+		version = "dev"
+	}
+	base, metadata, hasMetadata := strings.Cut(version, "+")
+	hasCE := false
+	for _, suffix := range strings.Split(base, "-")[1:] {
+		if suffix == "ce" || strings.HasPrefix(suffix, "ce.") {
+			hasCE = true
+			break
+		}
+	}
+	if !hasCE {
+		base += "-ce"
+	}
+	if hasMetadata {
+		base += "+" + metadata
+	}
+	return "v" + base
 }
 
 func exitErr(err error) {
@@ -138,7 +166,7 @@ func exitErr(err error) {
 
 	// 检查是否是文件/输入相关错误
 	errStr := err.Error()
-	if strings.Contains(errStr, "no such file") ||
+	if errors.Is(err, errIncompleteEvidence) || strings.Contains(errStr, "no such file") ||
 		strings.Contains(errStr, "cannot read") ||
 		strings.Contains(errStr, "failed to load") ||
 		strings.Contains(errStr, "failed to parse") ||
@@ -227,15 +255,39 @@ func runConvert(args []string) {
 	if *to != "flow" {
 		exitErr(fmt.Errorf("only --to flow is supported currently"))
 	}
-	fspec, err := spec.LoadFlowSpec(*in)
+	fspec, _, err := loadAndValidateFlow(*in)
 	if err != nil {
 		exitErr(err)
 	}
 	if !fspec.IsGraphMode() {
 		exitErr(fmt.Errorf("input is not in graph(DAG) format"))
 	}
-	conv := spec.ConvertGraphToFlow(fspec)
-	if err := spec.WriteFlowSpec(*out, conv); err != nil {
+	conv, err := spec.ConvertGraphToFlow(fspec)
+	if err != nil {
+		exitErr(err)
+	}
+	inputPath, err := filepath.Abs(*in)
+	if err != nil {
+		exitErr(err)
+	}
+	outputPath, err := filepath.Abs(*out)
+	if err != nil {
+		exitErr(err)
+	}
+	for alias, binding := range conv.Services {
+		if !filepath.IsAbs(binding.Spec) {
+			binding.Spec, err = filepath.Rel(filepath.Dir(outputPath), spec.ResolvePath(inputPath, binding.Spec))
+			if err != nil {
+				exitErr(err)
+			}
+			conv.Services[alias] = binding
+		}
+	}
+	data, err := yaml.Marshal(conv)
+	if err != nil {
+		exitErr(fmt.Errorf("failed to marshal converted FlowSpec: %w", err))
+	}
+	if err := validateAndPersistFlow(string(data), *out, filepath.Dir(*out)); err != nil {
 		exitErr(err)
 	}
 	fmt.Printf("Converted graph -> flow: %s\n", *out)

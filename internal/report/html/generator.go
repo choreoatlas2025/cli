@@ -6,7 +6,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/choreoatlas2025/cli/internal/fileio"
+	"github.com/choreoatlas2025/cli/internal/result"
 
 	"github.com/choreoatlas2025/cli/internal/validate"
 )
@@ -16,6 +17,9 @@ var htmlTemplate string
 
 // HTMLData represents the data structure passed to the HTML template
 type HTMLData struct {
+	validate.Outcome
+	ExitCode   int                   `json:"exitCode"`
+	Inputs     *InputBinding         `json:"inputs,omitempty"`
 	Summary    CoverageSummary       `json:"summary"`
 	Steps      []validate.StepResult `json:"steps"`
 	Spans      []SpanInfo            `json:"spans"`
@@ -23,6 +27,8 @@ type HTMLData struct {
 	GateResult *GateResult           `json:"gateResult,omitempty"`
 	Edition    string                `json:"edition"` // Always CE; retained in the report JSON format.
 }
+
+type InputBinding = result.InputBinding
 
 // CoverageSummary represents coverage statistics for HTML display
 type CoverageSummary struct {
@@ -48,11 +54,7 @@ type SpanInfo struct {
 }
 
 // GateResult represents baseline gate evaluation result
-type GateResult struct {
-	Checked bool                   `json:"checked"`
-	Passed  bool                   `json:"passed"`
-	Details map[string]interface{} `json:"details"`
-}
+type GateResult = result.GateResult
 
 // WriteHTMLReport generates and writes an HTML report file
 func WriteHTMLReport(outputPath string, data HTMLData) error {
@@ -68,14 +70,17 @@ func WriteHTMLReport(outputPath string, data HTMLData) error {
 		htmlTemplate, string(dataJSON))
 
 	// Write to file
-	return os.WriteFile(outputPath, []byte(content), 0644)
+	return fileio.WriteFile(outputPath, []byte(content), 0644)
 }
 
 // BuildHTMLData creates HTMLData from validation results and spans
 func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *GateResult) HTMLData {
-	summary := calculateSummary(steps, spans)
+	report := result.New(steps, gateResult, nil)
+	summary := summaryFromMetrics(report.Summary, spans)
 
 	return HTMLData{
+		Outcome:    report.Outcome,
+		ExitCode:   report.ExitCode,
 		Summary:    summary,
 		Steps:      steps,
 		Spans:      spans,
@@ -86,45 +91,13 @@ func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *Ga
 
 // calculateSummary computes coverage summary from step results
 func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSummary {
-	summary := CoverageSummary{}
+	return summaryFromMetrics(result.Measure(steps), spans)
+}
 
-	// Count steps
-	summary.StepsTotal = len(steps)
-	for _, step := range steps {
-		switch step.Status {
-		case "PASS":
-			summary.StepsPass++
-		case "FAIL":
-			summary.StepsFail++
-		case "SKIP":
-			summary.StepsSkip++
-		}
-	}
-
-	// Count conditions
-	for _, step := range steps {
-		for _, condition := range step.Conditions {
-			summary.ConditionsTotal++
-			switch condition.Status {
-			case "PASS":
-				summary.ConditionsPass++
-			case "FAIL":
-				summary.ConditionsFail++
-			case "SKIP":
-				summary.ConditionsSkip++
-			}
-		}
-	}
-
-	// Calculate rates
-	if summary.StepsTotal > 0 {
-		summary.StepsCoverage = float64(summary.StepsPass) / float64(summary.StepsTotal)
-	}
-
-	conditionsEvaluated := summary.ConditionsPass + summary.ConditionsFail
-	if conditionsEvaluated > 0 {
-		summary.ConditionsRate = float64(summary.ConditionsPass) / float64(conditionsEvaluated)
-	}
+func summaryFromMetrics(metrics result.CoverageSummary, spans []SpanInfo) CoverageSummary {
+	summary := CoverageSummary{StepsTotal: metrics.StepsTotal, StepsPass: metrics.StepsPass, StepsFail: metrics.StepsFail, StepsSkip: metrics.StepsSkip,
+		ConditionsTotal: metrics.ConditionsTotal, ConditionsPass: metrics.ConditionsPass, ConditionsFail: metrics.ConditionsFail, ConditionsSkip: metrics.ConditionsSkip,
+		StepsCoverage: metrics.StepsRate(), ConditionsRate: metrics.ConditionsRate(false)}
 
 	// Calculate duration from spans
 	if len(spans) > 0 {

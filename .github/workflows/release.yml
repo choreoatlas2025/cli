@@ -14,7 +14,14 @@ permissions:
   id-token: write
 
 jobs:
+  qualify:
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-ce')
+    uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ github.sha }}
+
   release:
+    needs: qualify
     runs-on: ubuntu-latest
     
     steps:
@@ -22,6 +29,21 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        ref: ${{ needs.qualify.outputs.revision }}
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: source-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/qualification
+
+    - name: Verify exact release qualification
+      env:
+        QUALIFIED_REVISION: ${{ needs.qualify.outputs.revision }}
+        QUALIFIED_TREE: ${{ needs.qualify.outputs.tree }}
+      run: |
+        test "$(git rev-parse HEAD)" = "$QUALIFIED_REVISION"
+        test "$(git rev-parse HEAD^{tree})" = "$QUALIFIED_TREE"
+        git tag --points-at HEAD | grep -Fx "$GITHUB_REF_NAME"
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -51,9 +73,10 @@ jobs:
       uses: goreleaser/goreleaser-action@v6
       with:
         distribution: goreleaser
-        version: '~> v2'
+        version: v2.12.0
         args: release --clean
       env:
+        QUALIFICATION_FILE: ${{ runner.temp }}/qualification/source-qualification.json
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GORELEASER_GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
         DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}

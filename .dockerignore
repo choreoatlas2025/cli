@@ -1,0 +1,7 @@
+# Keep Git metadata so the builder can verify the supplied full revision.
+bin
+dist
+.DS_Store
+.codex
+.agents
+.aws

@@ -25,7 +25,7 @@ func TestBuildCallGraph(t *testing.T) {
 		{
 			Attributes: map[string]any{
 				"otlp.span_id":        "span2",
-				"otlp.trace_id":       "trace1", 
+				"otlp.trace_id":       "trace1",
 				"otlp.parent_span_id": "span1",
 			},
 			Service:    "serviceB",
@@ -86,7 +86,7 @@ func TestCheckCausality(t *testing.T) {
 						Call: "serviceB.operationB",
 					},
 					{
-						Step: "step3", 
+						Step: "step3",
 						Call: "serviceC.operationC",
 					},
 				},
@@ -106,7 +106,7 @@ func TestCheckCausality(t *testing.T) {
 			},
 			"span2": {
 				SpanID:     "span2",
-				Service:    "serviceB", 
+				Service:    "serviceB",
 				Operation:  "operationB",
 				StartNanos: 2100,
 				EndNanos:   2300,
@@ -114,7 +114,7 @@ func TestCheckCausality(t *testing.T) {
 			"span3": {
 				SpanID:     "span3",
 				Service:    "serviceC",
-				Operation:  "operationC", 
+				Operation:  "operationC",
 				StartNanos: 2150,
 				EndNanos:   2250,
 			},
@@ -122,7 +122,7 @@ func TestCheckCausality(t *testing.T) {
 		Edges: []*CallEdge{},
 	}
 
-	results, allPassed := CheckCausality(flowSpec, graph)
+	results, allPassed := CheckCausality(flowSpec, graph, spec.DefaultValidationConfig())
 
 	if !allPassed {
 		t.Error("Expected all steps to pass causality check")
@@ -148,7 +148,7 @@ func TestCheckParallelSteps(t *testing.T) {
 			Call: "serviceX.operationX",
 		},
 		{
-			Step: "concurrent2", 
+			Step: "concurrent2",
 			Call: "serviceY.operationY",
 		},
 	}
@@ -164,7 +164,7 @@ func TestCheckParallelSteps(t *testing.T) {
 				EndNanos:   2000,
 			},
 			"spanY": {
-				SpanID:     "spanY", 
+				SpanID:     "spanY",
 				Service:    "serviceY",
 				Operation:  "operationY",
 				StartNanos: 1500, // 重叠时间窗口
@@ -260,7 +260,7 @@ func TestGetSpanIDFallback(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "otlp.span_id attribute", 
+			name: "otlp.span_id attribute",
 			span: trace.Span{
 				Attributes: map[string]any{
 					"otlp.span_id": "test_span_123",
@@ -293,8 +293,8 @@ func TestGetSpanIDFallback(t *testing.T) {
 func TestNormalizeComparison(t *testing.T) {
 	// 测试normalize函数的字符串标准化
 	tests := []struct {
-		input1   string
-		input2   string
+		input1      string
+		input2      string
 		shouldMatch bool
 	}{
 		{"ServiceA", "servicea", true},
@@ -307,9 +307,9 @@ func TestNormalizeComparison(t *testing.T) {
 		normalized1 := normalize(tt.input1)
 		normalized2 := normalize(tt.input2)
 		matches := (normalized1 == normalized2)
-		
+
 		if matches != tt.shouldMatch {
-			t.Errorf("normalize('%s') vs normalize('%s'): expected match=%t, got match=%t", 
+			t.Errorf("normalize('%s') vs normalize('%s'): expected match=%t, got match=%t",
 				tt.input1, tt.input2, tt.shouldMatch, matches)
 		}
 	}

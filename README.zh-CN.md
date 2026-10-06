@@ -6,7 +6,10 @@
 
 以契约即代码（Contract-as-Code）治理跨服务编排：发现、校验、引导（Discover → Specify → Guide）。
 
-Community Edition（CE）版本：零遥测，完全离线可用。
+Community Edition（CE）版本：不采集软件使用统计，完全离线可用。
+
+CE 读取顶层包含 `spans` 数组的本地 trace JSON，不提供 OTLP 接收、发送或直接文件导入。
+输入格式见[校验命令说明](docs/reference/cli/validate.md#trace-input-format)，范围依据见 [DECISIONS.md](DECISIONS.md)。
 
 - Atlas Scout：从追踪数据发现/生成契约
 - Atlas Proof：将编排与真实运行时行为进行对照验证
@@ -209,6 +212,8 @@ choreoatlas validate
   --baseline-missing string  基线缺失策略：fail|treat-as-absolute（默认 "fail"）
   --threshold-steps float    步骤覆盖阈值（默认 0.9）
   --threshold-conds float    条件通过率阈值（默认 0.95）
+  --max-steps-degradation float  基线模式允许的覆盖率相对退化量（默认 0）
+  --max-conds-degradation float  基线模式允许的条件通过率相对退化量（默认 0）
   --skip-as-fail        将 SKIP 视为 FAIL
   --report-format string 报告格式：json|junit|html（可选）
   --report-out string    报告输出路径（与 --report-format 一起使用）
