@@ -51,7 +51,7 @@ graph:
 ### Key Features
 - **Nodes**: Each node represents a service operation call
 - **Dependencies**: Use `depends` array to specify node dependencies
-- **Edges**: Normalized as the union of explicit `edges` and all node `depends` entries. Explicit edges never override or disable `depends`. Identical edges are counted once. CE supports unconditional dependencies only: nonempty `condition` fields are rejected rather than executed or ignored. An omitted or empty condition means an unconditional edge. Structure checks, topological ordering, causality, ancestor output visibility and conversion use this same normalized graph.
+- **Edges**: Normalized as the union of explicit `edges` and all node `depends` entries. Explicit edges never override or disable `depends`. Identical edges are counted once. CE supports unconditional dependencies only: nonempty `condition` fields are rejected rather than executed or ignored. An omitted or empty condition means an unconditional edge. Structure checks, topological ordering and causality use this same normalized graph. Optional `relationship: parent|follows|concurrent` makes the edge semantics explicit; omitted relationships retain the configured causality mode. Parent and concurrent edges do not provide completed output variables.
 - **Variables**: Flow between nodes via `output` and `input` mappings
 
 ### Example
@@ -134,7 +134,7 @@ choreoatlas spec convert --in graph.yaml --out flow.yaml
 
 Conversion supports an unconditional single chain. It preserves every call and
 its input, output, metadata, and order, and adjusts relative ServiceSpec paths for
-the output location. Cycles, conditional edges, branches, joins, and independent
+the output location. Explicit span relationships, cycles, conditional edges, branches, joins, and independent
 roots are rejected without writing the output. Keep these contracts in DAG form
 and validate them directly: independent DAG branches do not require the time
 overlap required by a Flow `parallel` group.

@@ -110,7 +110,11 @@ Quoted and multiline titles are serialized as YAML. Conflicts without `--force`
 leave existing files intact. With `--force`, ordinary commit failures roll back
 the entire set, including selected examples and workflows; this is not a
 cross-directory crash transaction. Trace mode parses and copies the same
-captured bytes and requires complete timestamps for ordering.
+captured bytes and requires complete timestamps. Trace mode and `discover` emit
+DAGs with explicit parent, completion and overlap relationships, and replay the
+generated structure against that capture before writing. Every call instance
+is retained, including retries. Common observed conditions still require review;
+varying observations are noted rather than imposed on every attempt.
 
 ### Basic Usage
 
@@ -132,8 +136,8 @@ choreoatlas discover \
   --trace examples/traces/successful-order.trace.json \
   --out discovered.flowspec.yaml \
   --out-services ./services
-# By default, discover enforces JSON Schema + lint gates and only writes on success.
-# To bypass (not recommended), add: --no-validate
+# Discovery replays the source structure and enforces JSON Schema + lint before writing.
+# --no-validate skips Schema/lint only; source structure replay still runs.
 # Note: discover intentionally does not generate an input block; telemetry (http.* / otel.*)
 # is converted into ServiceSpec pre/postconditions. Provide actual path/query/headers/body
 # arguments later if needed.

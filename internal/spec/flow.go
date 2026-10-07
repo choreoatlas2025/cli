@@ -62,6 +62,16 @@ type GraphEdge struct {
 	From      string `yaml:"from"`
 	To        string `yaml:"to"`
 	Condition string `yaml:"condition,omitempty"` // Nonempty conditions are unsupported in CE.
+	// An explicit relationship retains its meaning in either strict or temporal
+	// mode. Empty relationships retain the existing --causality interpretation.
+	Relationship string `yaml:"relationship,omitempty"`
+}
+
+// CarriesOutputs distinguishes completion dependencies from relationships
+// which only constrain span structure. A parent's response is not available to
+// its child, nor is a concurrent call's response available to its sibling.
+func (e GraphEdge) CarriesOutputs() bool {
+	return e.Relationship == "" || e.Relationship == "follows"
 }
 
 // LoadFlowSpec loads flow specification from file
@@ -217,6 +227,11 @@ func (gs *GraphSpec) ValidateGraphStructure() error {
 
 func (gs *GraphSpec) validateEdgeConditions() error {
 	for _, edge := range gs.Edges {
+		switch edge.Relationship {
+		case "", "parent", "follows", "concurrent":
+		default:
+			return fmt.Errorf("invalid contract: unsupported edge relationship %q", edge.Relationship)
+		}
 		if edge.Condition != "" {
 			return fmt.Errorf("invalid contract: unsupported conditional edge %s -> %s: CE supports unconditional dependencies only", edge.From, edge.To)
 		}

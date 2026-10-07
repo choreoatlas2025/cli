@@ -46,7 +46,8 @@ func TestValidateAndPersistFlow_NormalizesHTTPAndPasses(t *testing.T) {
     }
 
     // Generate Flow YAML and validate (should pass due to opId normalization)
-    yml := generateFlowYAML(tr, "From HTTP Trace", outServices)
+    yml, err := generateFlowYAML(tr, "From HTTP Trace", outServices)
+    if err != nil { t.Fatal(err) }
     if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
         t.Fatalf("expected validation to pass with normalized call, got: %v", err)
     }
@@ -80,7 +81,8 @@ func TestValidateAndPersistFlow_PassesOnValidExample(t *testing.T) {
         t.Fatalf("failed to generate servicespecs: %v", err)
     }
 
-    yml := generateFlowYAML(tr, "From Example", outServices)
+    yml, err := generateFlowYAML(tr, "From Example", outServices)
+    if err != nil { t.Fatal(err) }
     if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
         t.Fatalf("unexpected validation failure: %v", err)
     }

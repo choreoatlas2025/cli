@@ -379,15 +379,12 @@ func TestCorrectnessEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var nodes []spec.GraphNode
-	var edges []spec.GraphEdge
-	for i, step := range flow.Flow {
-		nodes = append(nodes, spec.GraphNode{ID: step.Step, Call: step.Call, Input: step.Input, Output: step.Output, Meta: step.Meta})
-		if i > 0 {
-			edges = append(edges, spec.GraphEdge{From: flow.Flow[i-1].Step, To: step.Step})
-		}
+	// Explicit discovered relationships must not be lost in legacy conversion.
+	correctnessCommand(t, dir, 2, "spec", "convert", "--in", "contracts/discovered.yaml", "--out", "converted.yaml")
+	// Keep the existing conversion/report exercise on a plain serial DAG.
+	for i := range flow.Graph.Edges {
+		flow.Graph.Edges[i].Relationship = ""
 	}
-	flow.Flow, flow.Graph = nil, &spec.GraphSpec{Nodes: nodes, Edges: edges}
 	correctnessWrite(t, filepath.Join(dir, "contracts", "graph.yaml"), flow)
 	if err := os.Mkdir(filepath.Join(dir, "converted"), 0o755); err != nil {
 		t.Fatal(err)

@@ -192,11 +192,11 @@ Commands:
   lint      Static checks (structure + coherence + variables + parallel reachability)
     --flow <file> [--schema]
   validate  Alias of lint for spec-level validation
-  convert   graph(DAG) -> flow (CE default)
+  convert   graph(DAG) -> flow
     --in <file> --to flow --out <file>
 
 Notes:
-  - CE defaults to flow format; graph is supported for conversion and linting.
+  - Trace discovery emits graph format; graph and legacy flow support validation.
   - Use --format json|ndjson|junit for machine-readable output.
 `)
 }

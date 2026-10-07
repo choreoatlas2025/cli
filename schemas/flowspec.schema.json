@@ -143,6 +143,11 @@
                 "type": "string",
                 "maxLength": 0,
                 "description": "CE supports unconditional edges only; nonempty conditions are rejected"
+              },
+              "relationship": {
+                "type": "string",
+                "enum": ["parent", "follows", "concurrent"],
+                "description": "Explicit span relationship; omitted edges use the configured causality mode"
               }
             }
           }

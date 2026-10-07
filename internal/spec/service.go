@@ -142,34 +142,56 @@ func groupSpansByService(spans []trace.Span) (map[string][]ServiceOperation, err
 	return serviceOps, nil
 }
 
-// generateServiceOperation 从 span 列表生成单个 ServiceOperation
+// generateServiceOperation retains only observations shared by all instances.
+// Repeated calls and retries may have different responses: the last observed
+// value cannot become a requirement imposed on every instance.
 func generateServiceOperation(opName string, spans []trace.Span) ServiceOperation {
-	preconditions := make(map[string]string)
-	postconditions := make(map[string]string)
-
-	// 从所有相关 spans 的 attributes 中提取条件
-	for _, span := range spans {
-		for key, value := range span.Attributes {
-			if celExpr := buildCELExpression(key, value); celExpr != "" {
+	preconditions, postconditions := map[string]string{}, map[string]string{}
+	varied := false
+	for i, span := range spans {
+		pre, post := map[string]string{}, map[string]string{}
+		for _, key := range sortedAttributeKeys(span.Attributes) {
+			value := span.Attributes[key]
+			if expr := buildCELExpression(key, value); expr != "" {
 				if isRequestAttribute(key) {
-					// 请求相关属性生成前置条件
-					conditionName := generateConditionName("req", key)
-					preconditions[conditionName] = celExpr
+					pre[generateConditionName("req", key)] = expr
 				} else if isResponseAttribute(key) {
-					// 响应相关属性生成后置条件
-					conditionName := generateConditionName("resp", key)
-					postconditions[conditionName] = celExpr
+					post[generateConditionName("resp", key)] = expr
+				}
+			}
+		}
+		if i == 0 {
+			preconditions, postconditions = pre, post
+			continue
+		}
+		for _, pair := range [][2]map[string]string{{preconditions, pre}, {postconditions, post}} {
+			for key, expr := range pair[0] {
+				if pair[1][key] != expr {
+					delete(pair[0], key)
+					varied = true
+				}
+			}
+			for key, expr := range pair[1] {
+				if pair[0][key] != expr {
+					varied = true
 				}
 			}
 		}
 	}
-
-	return ServiceOperation{
-		OperationId:    opName,
-		Description:    fmt.Sprintf("Auto-generated %s operation from trace", opName),
-		Preconditions:  preconditions,
-		Postconditions: postconditions,
+	description := fmt.Sprintf("Auto-generated %s operation from trace", opName)
+	if varied {
+		description += "; varying or missing observations omitted: review retry outcomes and add business requirements"
 	}
+	return ServiceOperation{OperationId: opName, Description: description, Preconditions: preconditions, Postconditions: postconditions}
+}
+
+func sortedAttributeKeys(attributes map[string]any) []string {
+	keys := make([]string, 0, len(attributes))
+	for key := range attributes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // buildCELExpression 根据属性键值生成 CEL 表达式

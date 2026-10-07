@@ -28,6 +28,39 @@ Control the level of causality checking with the `--causality` flag:
 - `temporal`: Use temporal ordering based on timestamps (default)
 - `off`: Disable dependency and metadata timing checks; unique span consumption, semantic checks, and explicit parallel overlap checks remain enabled
 
+### Explicit DAG Relationships
+
+Graph edges may declare `relationship: parent|follows|concurrent`. These retain
+one meaning in both temporal and strict modes; edges without this field and
+`depends` entries keep the existing mode-based interpretation.
+
+- `parent`: Match the successor's direct parent ID to the predecessor's span ID.
+  The trace's parent intervals must also satisfy the usual containment check.
+- `follows`: Require the predecessor to complete before the successor starts,
+  within tolerance, independently of parent IDs.
+- `concurrent`: Require the two matched spans' intervals to overlap.
+
+`off` skips parent and completion constraints, but explicit concurrent edges
+still require complete intervals and overlap, just like Flow `parallel`.
+Parent and concurrent edges are structural constraints and do not expose the
+predecessor's completed outputs to the successor. Use completion dependencies
+for response-based data flow. Legacy untyped edges retain their data flow rules.
+Graph-to-Flow conversion rejects explicit relationships to avoid losing them.
+
+For a nested call followed by another child:
+
+```yaml
+graph:
+  nodes:
+    - {id: request, call: frontend.dispatch}
+    - {id: customer, call: customer.lookup}
+    - {id: driver, call: driver.search}
+  edges:
+    - {from: request, to: customer, relationship: parent}
+    - {from: request, to: driver, relationship: parent}
+    - {from: customer, to: driver, relationship: follows}
+```
+
 ### Time Tolerance
 Configure time tolerance for edge constraints with `--causality-tolerance` (in milliseconds):
 

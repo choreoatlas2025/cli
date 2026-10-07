@@ -13,17 +13,17 @@ graph LR
     B --> D[ServiceSpec files]
 ```
 
-1. **Input**: Takes a trace.json file containing service call sequences
-2. **Analysis**: Extracts service interactions, operation calls, and data flow
+1. **Input**: Takes native trace.json with complete span intervals and optional parent IDs
+2. **Analysis**: Preserves call instances, available parent links, and observed timing between adjacent siblings
 3. **Output**: Generates dual contracts:
-   - FlowSpec defining the choreography
+   - FlowSpec DAG describing sampled call structure
    - ServiceSpec files for each participating service
 
-Generation and schema/lint checks run in a temporary location before destination
+Generation, source structure replay, and schema/lint checks run before destination
 files are replaced. A validation failure leaves existing contracts unchanged.
 Outputs are prepared together; ordinary commit errors roll back completed file
 replacements. This also applies with `--no-validate`, which skips schema/lint checks
-but retains staged writes and rollback. ServiceSpec paths resolve relative to the
+but retains source structure replay, staged writes, and rollback. ServiceSpec paths resolve relative to the
 generated FlowSpec, including when outputs use different directories.
 
 HTTP operation IDs and runtime matching use the same method/path identity.
@@ -37,8 +37,27 @@ Distinct source operations that normalize to the same ID are rejected before
 writing contracts, rather than silently merged. Generated HTTP attribute
 conditions use `span.attributes["http.method"]` and equivalent exact keys;
 status conditions use `response.status`, including `http.response.status_code`.
-Generated conditions describe observed values and still need review before they
-become requirements.
+Generated conditions retain observations shared by all instances of an operation.
+Varying or absent values are omitted and noted in the operation description; a
+failed retry's response must not become the required response of every attempt.
+These sampled conditions still need review before they become business requirements.
+
+Both `discover` and `init --mode trace` emit a DAG with explicit edge relationships:
+`parent` verifies a direct parent ID; `follows` verifies completion before start;
+`concurrent` verifies overlapping intervals. Parent links and timing relationships
+can coexist without switching the entire contract between strict and temporal
+semantics. Timing edges describe adjacent sampled siblings, not every possible
+pair or a proven business dependency. Without parent IDs, interval overlap cannot
+establish a parent-child relationship. Missing external parents are not fabricated.
+
+Every source span becomes a separate node, including repeated operations and
+failed retry attempts. Trace IDs, duplicate span identities, timestamps and
+parent timing are checked before writing. The generator replays the structure
+against the same input under default temporal validation; unsupported or
+inconsistent structures fail before any destination is replaced. This replay
+checks structure, not business success. Drafts with no common conditions still
+need explicit business assertions to satisfy the condition coverage threshold.
+Inputs, outputs and response bodies are not inferred or fabricated.
 
 ## Basic Usage
 
@@ -142,18 +161,16 @@ services:
   inventoryService:
     spec: "./services/inventoryService.servicespec.yaml"
 
-flow:
-  - step: "Step1-createOrder"
-    call: "orderService.createOrder"
-    output:
-      orderResponse: "response.body"
-
-  - step: "Step2-checkInventory"
-    call: "inventoryService.checkInventory"
-    input:
-      orderId: "${orderResponse.orderId}"
-    output:
-      inventoryResponse: "response.body"
+graph:
+  nodes:
+    - id: step-0001
+      call: orderService.createOrder
+    - id: step-0002
+      call: inventoryService.checkInventory
+  edges:
+    - from: step-0001
+      to: step-0002
+      relationship: follows
 ```
 
 ### Step 4: Review Generated ServiceSpecs
@@ -188,9 +205,9 @@ choreoatlas validate --flow order-flow.yaml --trace order-trace.json
 The current discovery implementation has these limitations:
 
 1. **Basic extraction**: Generates minimal contracts requiring manual refinement
-2. **Sequential flow only**: Doesn't detect parallel operations
+2. **Sampled structure**: Preserves parent links and adjacent sibling timing; one trace does not establish all allowed paths or business dependencies
 3. **No variable inference**: Variable references need manual adjustment
-4. **Observed conditions**: HTTP method/path attributes and status checks reflect sampled values; they do not infer business invariants
+4. **Observed conditions**: Only shared sampled observations become conditions; varying retry outcomes need an explicit policy
 5. **No business-rule inference**: Complex conditions must be added manually
 
 ## Best Practices

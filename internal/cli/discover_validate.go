@@ -71,7 +71,11 @@ func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noV
 	// Both staged and final contracts refer to files relative to their own paths.
 	if !noValidate {
 		stagedFlow := filepath.Join(staging, "flow.yaml")
-		if err := os.WriteFile(stagedFlow, []byte(generateFlowYAML(tr, title, staging)), 0o644); err != nil {
+		generated, err := generateFlowYAML(tr, title, staging)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(stagedFlow, []byte(generated), 0o644); err != nil {
 			return err
 		}
 		if err := validateGeneratedFlow(stagedFlow); err != nil {
@@ -82,7 +86,10 @@ func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noV
 	if err != nil {
 		return err
 	}
-	flowYAML := generateFlowYAML(tr, title, bindingDir)
+	flowYAML, err := generateFlowYAML(tr, title, bindingDir)
+	if err != nil {
+		return err
+	}
 	// Final output must remain parseable even when schema/lint checks are skipped.
 	var flow spec.FlowSpec
 	if err := yaml.Unmarshal([]byte(flowYAML), &flow); err != nil {

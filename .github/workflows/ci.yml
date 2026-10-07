@@ -71,7 +71,7 @@ jobs:
     - name: Run CLI regressions against the built binary
       env:
         CHOREOATLAS_CORRECTNESS_BINARY: ${{ github.workspace }}/bin/choreoatlas
-      run: go test ./internal/cli -run '^(TestCorrectness|TestRecheck|TestRound3|TestSnapshot|TestRemaining|TestArchitecture)' -count=1
+      run: go test ./internal/cli -run '^(TestCorrectness|TestRecheck|TestRound3|TestSnapshot|TestRemaining|TestArchitecture|TestDiscovery|TestTypedStructural)' -count=1
 
     - uses: actions/setup-node@v4
       with:

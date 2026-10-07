@@ -51,7 +51,7 @@ func TestRound3HTTPDiscoveryValidatesOwnTrace(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		node := flow.Flow[0]
+		node := flow.CallSteps()[0]
 		flow.Flow = nil
 		flow.Graph = &spec.GraphSpec{Nodes: []spec.GraphNode{{ID: "http", Call: node.Call, Input: node.Input, Output: node.Output}}}
 		correctnessWrite(t, filepath.Join(dir, "graph.yaml"), flow)

@@ -279,6 +279,9 @@ func validateVariableFlow(graph *spec.GraphSpec) error {
 	radj := make(map[string][]string) // reverse adjacency for dependency tracking
 
 	for _, edge := range graph.Edges {
+		if !edge.CarriesOutputs() {
+			continue
+		}
 		adj[edge.From] = append(adj[edge.From], edge.To)
 		radj[edge.To] = append(radj[edge.To], edge.From)
 	}

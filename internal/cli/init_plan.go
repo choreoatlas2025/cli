@@ -112,9 +112,16 @@ func renderInitFiles(opts initOptions, assets fs.FS) ([]generatedFile, string, e
 		if err := trace.ValidateTimestamps(tr.Spans, true); err != nil {
 			return nil, "", err
 		}
-		sort.SliceStable(tr.Spans, func(i, j int) bool { return tr.Spans[i].StartNanos < tr.Spans[j].StartNanos })
-		add(".flowspec.yaml", []byte(generateFlowYAML(tr, opts.Title, "./services")))
-		add("flows/"+deriveFlowFileName(opts.TracePath), []byte(generateFlowYAML(tr, opts.Title, "../services")))
+		for _, output := range []struct{ path, services string }{
+			{".flowspec.yaml", "./services"},
+			{"flows/" + deriveFlowFileName(opts.TracePath), "../services"},
+		} {
+			generated, err := generateFlowYAML(tr, opts.Title, output.services)
+			if err != nil {
+				return nil, "", err
+			}
+			add(output.path, []byte(generated))
+		}
 		services, err := spec.BuildServiceSpecFiles(tr.Spans)
 		if err != nil {
 			return nil, "", err

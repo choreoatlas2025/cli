@@ -30,6 +30,9 @@ func ConvertGraphToFlow(fs *FlowSpec) (*FlowSpec, error) {
 		nodes[n.ID] = n
 	}
 	for _, e := range g.Edges {
+		if e.Relationship != "" {
+			return nil, fmt.Errorf("invalid conversion: explicit span relationships cannot be represented equivalently by Flow; retain DAG format")
+		}
 		inDegree[e.To]++
 		if _, exists := successor[e.From]; exists || inDegree[e.To] > 1 {
 			return nil, fmt.Errorf("invalid conversion: branching or joining cannot be represented equivalently by Flow; retain DAG format")

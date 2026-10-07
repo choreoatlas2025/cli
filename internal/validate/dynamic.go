@@ -56,13 +56,24 @@ func validateAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]spec.
 		flowCopy.Graph = &graphCopy
 		fs = &flowCopy
 	}
-	if err := trace.ValidateTimestamps(tr.Spans, CausalityMode(config.Causality) != CausalityOff || hasParallel(fs.Flow)); err != nil {
+	if err := trace.ValidateTimestamps(tr.Spans, CausalityMode(config.Causality) != CausalityOff || hasParallel(fs.Flow) || hasConcurrentEdges(fs.Graph)); err != nil {
 		return []StepResult{{Step: "trace-time", Call: "internal", Status: "FAIL", Message: err.Error()}}, false
 	}
 	if fs.IsGraphMode() {
 		return validateGraphAgainstTrace(fs, opIndex, tr, config, eval)
 	}
 	return validateWithCausality(fs, opIndex, tr, config, eval)
+}
+
+func hasConcurrentEdges(graph *spec.GraphSpec) bool {
+	if graph != nil {
+		for _, edge := range graph.Edges {
+			if edge.Relationship == "concurrent" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasParallel(steps []spec.FlowStep) bool {
@@ -184,7 +195,16 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 
 	// Match repeated calls in time order, independent of trace file order.
 	for key := range spanIndex {
-		sort.SliceStable(spanIndex[key], func(i, j int) bool { return spanIndex[key][i].StartNanos < spanIndex[key][j].StartNanos })
+		sort.Slice(spanIndex[key], func(i, j int) bool {
+			a, b := spanIndex[key][i], spanIndex[key][j]
+			if a.StartNanos != b.StartNanos {
+				return a.StartNanos < b.StartNanos
+			}
+			if a.EndNanos != b.EndNanos {
+				return a.EndNanos < b.EndNanos
+			}
+			return getSpanID(a) < getSpanID(b)
+		})
 	}
 	matchedSpans := map[string]*trace.Span{}
 	exports := map[string]map[string]any{}
@@ -217,11 +237,9 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 			if usedSpans[getSpanID(*span)] {
 				continue
 			}
-			if CausalityMode(config.Causality) != CausalityOff {
-				if err := validateCausality(node, span, fs.Graph, matchedSpans, config); err != nil {
-					causalityErr = err
-					continue
-				}
+			if err := validateCausality(node, span, fs.Graph, matchedSpans, config); err != nil {
+				causalityErr = err
+				continue
 			}
 			matchedSpan = span
 			break
@@ -256,22 +274,37 @@ func validateGraphAgainstTrace(fs *spec.FlowSpec, opIndex map[string]map[string]
 
 // validateCausality checks causality constraints for DAG nodes
 func validateCausality(node *spec.GraphNode, nodeSpan *trace.Span, graph *spec.GraphSpec, matchedSpans map[string]*trace.Span, config spec.ValidationConfig) error {
-	for _, predID := range getPredecessors(node.ID, graph) {
+	for _, edge := range graph.Edges {
+		if edge.To != node.ID || (config.Causality == "off" && edge.Relationship != "concurrent") {
+			continue
+		}
+		predID := edge.From
 		predSpan := matchedSpans[predID]
 		if predSpan == nil {
 			return fmt.Errorf("predecessor %s has no matched span", predID)
 		}
 
-		// Apply causality mode
-		switch CausalityMode(config.Causality) {
-		case CausalityStrict:
+		relationship := edge.Relationship
+		if relationship == "" {
+			if config.Causality == "strict" {
+				relationship = "parent"
+			} else {
+				relationship = "follows"
+			}
+		}
+		switch relationship {
+		case "parent":
 			// Check parent-child relationship
 			if !isParentChild(predSpan, nodeSpan) {
 				return fmt.Errorf("node %s should be child of %s (strict mode)", node.ID, predID)
 			}
-		case CausalityTemporal:
+		case "follows":
 			if !completesBefore(predSpan.EndNanos, nodeSpan.StartNanos, config.ToleranceMs) {
 				return fmt.Errorf("node %s starts before predecessor %s completes (temporal mode)", node.ID, predID)
+			}
+		case "concurrent":
+			if predSpan.StartNanos >= nodeSpan.EndNanos || nodeSpan.StartNanos >= predSpan.EndNanos {
+				return fmt.Errorf("node %s must overlap predecessor %s (concurrent relationship)", node.ID, predID)
 			}
 		}
 	}
@@ -344,7 +377,7 @@ func findNodeByID(graph *spec.GraphSpec, id string) *spec.GraphNode {
 func getPredecessors(nodeID string, graph *spec.GraphSpec) []string {
 	var preds []string
 	for _, edge := range graph.Edges {
-		if edge.To == nodeID {
+		if edge.To == nodeID && edge.CarriesOutputs() {
 			preds = append(preds, edge.From)
 		}
 	}
