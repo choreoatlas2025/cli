@@ -94,7 +94,7 @@ func TestRemainingMixedDependencies(t *testing.T) {
 		correctnessWrite(t, filepath.Join(dir, "flow.yaml"), flow)
 		correctnessWrite(t, filepath.Join(dir, "svc.yaml"), spec.ServiceSpecFile{Service: "svc", Operations: []spec.ServiceOperation{
 			{OperationId: "A", Postconditions: map[string]string{"ok": "true"}},
-			{OperationId: "B", Postconditions: map[string]string{"id": "request.body.id == 42 && vars.id == 42"}},
+			{OperationId: "B", Postconditions: map[string]string{"id": "expected.body.id == 42 && vars.id == 42"}},
 			{OperationId: "C", Postconditions: map[string]string{"ancestor": "vars.id == 42"}},
 		}})
 		correctnessCommand(t, dir, 0, "lint", "--flow", "flow.yaml")
@@ -134,7 +134,7 @@ func TestRemainingTypedNumberDataflowAndReports(t *testing.T) {
 			correctnessWrite(t, filepath.Join(dir, "flow.yaml"), flow)
 			correctnessWrite(t, filepath.Join(dir, "svc.yaml"), spec.ServiceSpecFile{Service: "svc", Operations: []spec.ServiceOperation{
 				{OperationId: "a", Postconditions: map[string]string{"ok": "true"}},
-				{OperationId: "b", Postconditions: map[string]string{"exact": `vars.identifier == response.body.id && vars.payload.id == response.body.id && vars.ids[0] == response.body.id && request.body.id == response.body.id && request.body.ids[0] == response.body.id && request.body.text == "id-9007199254740993"`}},
+				{OperationId: "b", Postconditions: map[string]string{"exact": `vars.identifier == response.body.id && vars.payload.id == response.body.id && vars.ids[0] == response.body.id && expected.body.id == response.body.id && expected.body.ids[0] == response.body.id && expected.body.text == "id-9007199254740993"`}},
 			}})
 			correctnessCommand(t, dir, 0, "baseline", "record", "--flow", "flow.yaml", "--trace", "trace.json", "--out", "baseline.json")
 			correctnessCommand(t, dir, 0, "validate", "--flow", "flow.yaml", "--trace", "trace.json", "--baseline", "baseline.json", "--report-format", "json", "--report-out", "report.json")

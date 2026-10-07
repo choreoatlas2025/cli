@@ -108,7 +108,7 @@ func TestRound3CrossStepOutputs(t *testing.T) {
 			correctnessTrace(t, dir, spans)
 			correctnessWrite(t, filepath.Join(dir, "svc.yaml"), spec.ServiceSpecFile{Service: "svc", Operations: []spec.ServiceOperation{
 				{OperationId: "A", Postconditions: map[string]string{"ok": "true"}},
-				{OperationId: "B", Preconditions: map[string]string{"id": "request.body.id == 42 && vars.created.id == 42"}, Postconditions: map[string]string{"ok": "true"}},
+				{OperationId: "B", Preconditions: map[string]string{"id": "expected.body.id == 42 && vars.created.id == 42"}, Postconditions: map[string]string{"ok": "true"}},
 			}})
 			correctnessCommand(t, dir, 0, "lint", "--flow", "flow.yaml")
 			correctnessCommand(t, dir, 0, "validate", "--flow", "flow.yaml", "--trace", "trace.json")

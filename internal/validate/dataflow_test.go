@@ -15,7 +15,7 @@ func TestDataflowTypedInputAndOutput(t *testing.T) {
 		{Step: "A", Call: "svc.A", Output: map[string]string{"created": "response.body", "count": "42"}},
 		{Step: "B", Call: "svc.B", Input: map[string]any{"body": map[string]any{"payload": "${created}", "id": "id-${created.id}", "count": "${count}"}}},
 	}}
-	ops := map[string]map[string]spec.ServiceOperation{"svc": {"A": {Postconditions: map[string]string{"ok": "true"}}, "B": {Preconditions: map[string]string{"typed": `request.body.payload.items[0] == "x" && request.body.count == 42 && request.body.id == "id-42" && vars.created.id == 42`}}}}
+	ops := map[string]map[string]spec.ServiceOperation{"svc": {"A": {Postconditions: map[string]string{"ok": "true"}}, "B": {Preconditions: map[string]string{"typed": `expected.body.payload.items[0] == "x" && expected.body.count == 42 && expected.body.id == "id-42" && vars.created.id == 42`}}}}
 	tr := &trace.Trace{Spans: []trace.Span{{Service: "svc", Name: "A", StartNanos: 1, EndNanos: 2, Attributes: map[string]any{"response.body": map[string]any{"id": 42, "items": []any{"x"}}}}, {Service: "svc", Name: "B", StartNanos: 3, EndNanos: 4}}}
 	if results, passed := ValidateAgainstTrace(flow, ops, tr, spec.DefaultValidationConfig()); !passed {
 		t.Fatalf("typed dataflow failed: %+v", results)
@@ -52,7 +52,7 @@ func TestDataflowParallelScopes(t *testing.T) {
 
 func TestDataflowUnknownInputIsNotLiteral(t *testing.T) {
 	flow := &spec.FlowSpec{Flow: []spec.FlowStep{{Step: "A", Call: "svc.A", Input: map[string]any{"id": "${customerId}"}}}}
-	ops := map[string]map[string]spec.ServiceOperation{"svc": {"A": {Preconditions: map[string]string{"present": `request.body.id != ""`}}}}
+	ops := map[string]map[string]spec.ServiceOperation{"svc": {"A": {Preconditions: map[string]string{"present": `expected.body.id != ""`}}}}
 	tr := &trace.Trace{Spans: []trace.Span{{Service: "svc", Name: "A", StartNanos: 1, EndNanos: 2}}}
 	if results, passed := ValidateAgainstTrace(flow, ops, tr, spec.DefaultValidationConfig()); passed {
 		t.Fatalf("unknown input passed as placeholder text: %+v", results)

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/choreoatlas2025/cli/internal/evidence"
 	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
@@ -66,9 +67,9 @@ func CompilePlan(flow *spec.FlowSpec, ops map[string]map[string]spec.ServiceOper
 	}
 	p := &ContractPlan{flow: frozen, operations: owned, config: config, programs: map[string]compiledExpression{}}
 	identity, err := json.Marshal(struct {
-		Flow, Operations string
-		Config           spec.ValidationConfig
-	}{string(flowBytes), string(opBytes), config})
+		Flow, Operations, EvidenceSemantics string
+		Config                              spec.ValidationConfig
+	}{string(flowBytes), string(opBytes), evidence.SemanticsVersion, config})
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,7 @@ func CompilePlan(flow *spec.FlowSpec, ops map[string]map[string]spec.ServiceOper
 	if !config.Semantic {
 		return p, nil
 	}
-	env, err := cel.NewEnv(cel.Variable("request", cel.DynType), cel.Variable("response", cel.DynType), cel.Variable("span", cel.DynType), cel.Variable("vars", cel.DynType), cel.ParserRecursionLimit(100), cel.ParserExpressionSizeLimit(input.MaxExpressionBytes))
+	env, err := cel.NewEnv(cel.Variable("expected", cel.DynType), cel.Variable("request", cel.DynType), cel.Variable("response", cel.DynType), cel.Variable("span", cel.DynType), cel.Variable("vars", cel.DynType), cel.ParserRecursionLimit(100), cel.ParserExpressionSizeLimit(input.MaxExpressionBytes))
 	if err != nil {
 		return nil, err
 	}

@@ -10,21 +10,20 @@ import (
 
 	"github.com/google/cel-go/common/types"
 
+	"github.com/choreoatlas2025/cli/internal/evidence"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
 type ConditionResult = verdict.ConditionResult
 
-// 将 FlowSpec 的 input + span.attributes 投影为 CEL 环境可用的变量
-// 约定：
-// - request: declared input, with typed references resolved from preceding outputs
-// - response: 从 span.attributes 映射，优先使用 response.status，再使用 HTTP 状态码
-// - span: { name, service, attributes }
-// - vars: validated outputs visible to this step
+// Declarations are expected values; request/response are captured observations.
 func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any) (map[string]any, error) {
-	// Resolve declared input without treating missing variables as literal strings.
-	request := map[string]any{}
+	projected, err := evidence.Bind(sp)
+	if err != nil {
+		return nil, err
+	}
+	expected := map[string]any{}
 	if step.Input != nil {
 		input := resolveInput(step.Input, vars).(map[string]any)
 		structured := false
@@ -34,47 +33,21 @@ func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any)
 			}
 		}
 		if structured {
-			request = input
+			expected = input
 		} else {
-			request["body"] = input
+			expected["body"] = input
 		}
 	}
+	return map[string]any{"expected": expected, "request": projected.Request, "response": projected.Response, "span": projected.Span, "vars": vars}, nil
+}
 
-	// 响应投影：尽量从 attributes 推断出 response.status / response.body
-	response := map[string]any{}
-	// 提取 status
-	statusKeys := []string{"response.status", "http.response.status_code", "http.status_code", "statusCode"}
-	var status any
-	for _, k := range statusKeys {
-		if v, ok := sp.Attributes[k]; ok {
-			status = v
-			break
-		}
+// Evaluation errors remain failures. Missing keys and unresolved declared
+// references are insufficient evidence; other CEL errors are execution errors.
+func evaluationIssue(err error) verdict.IssueKind {
+	if strings.Contains(err.Error(), "no such key:") || strings.Contains(err.Error(), "unresolved input variable") {
+		return verdict.MissingEvidence
 	}
-	if status != nil {
-		response["status"] = status
-	} else {
-		response["status"] = 0 // 未知
-	}
-	// body：优先 attributes["response.body"]；否则用整个 attributes 兜底
-	if b, ok := sp.Attributes["response.body"]; ok {
-		response["body"] = b
-	} else {
-		response["body"] = sp.Attributes
-	}
-
-	span := map[string]any{
-		"name":       sp.Name,
-		"service":    sp.Service,
-		"attributes": sp.Attributes,
-	}
-
-	return map[string]any{
-		"request":  request,
-		"response": response,
-		"span":     span,
-		"vars":     vars,
-	}, nil
+	return verdict.ExecutionError
 }
 
 // 简单规范化表达式：支持 foo =~ /re/ 语法，转为 foo.matches("re")
@@ -121,15 +94,19 @@ func (e *evaluation) conditions(
 	results := []ConditionResult{}
 	passAll := true
 
-	envVars, _ := buildEvalEnvForStep(step, sp, vars)
+	envVars, envErr := buildEvalEnvForStep(step, sp, vars)
 
 	// 预条件
 	for _, name := range sortedKeys(op.Preconditions) {
 		expr := op.Preconditions[name]
-		ok, phase, err := e.boolean(expr, envVars)
+		ok, phase, err := false, "binding", envErr
+		if err == nil {
+			ok, phase, err = e.boolean(expr, envVars)
+		}
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"
+			cr.Issue = evaluationIssue(err)
 			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
 			passAll = false
 		} else if ok {
@@ -137,6 +114,7 @@ func (e *evaluation) conditions(
 		} else {
 			cr.Status = "FAIL"
 			cr.Message = "result is false"
+			cr.Issue = verdict.RuleViolation
 			passAll = false
 		}
 		results = append(results, cr)
@@ -145,10 +123,14 @@ func (e *evaluation) conditions(
 	// 后置条件
 	for _, name := range sortedKeys(op.Postconditions) {
 		expr := op.Postconditions[name]
-		ok, phase, err := e.boolean(expr, envVars)
+		ok, phase, err := false, "binding", envErr
+		if err == nil {
+			ok, phase, err = e.boolean(expr, envVars)
+		}
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"
+			cr.Issue = evaluationIssue(err)
 			cr.Message = fmt.Sprintf("CEL %s error: %v", phase, err)
 			passAll = false
 		} else if ok {
@@ -156,6 +138,7 @@ func (e *evaluation) conditions(
 		} else {
 			cr.Status = "FAIL"
 			cr.Message = "result is false"
+			cr.Issue = verdict.RuleViolation
 			passAll = false
 		}
 		results = append(results, cr)

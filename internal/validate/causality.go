@@ -19,6 +19,7 @@ type CallGraph struct {
 
 // CallNode 表示调用图中的节点
 type CallNode struct {
+	Span       trace.Span     `json:"-"`
 	SpanID     string         `json:"spanId"`
 	TraceID    string         `json:"traceId"`
 	Service    string         `json:"service"`
@@ -59,6 +60,7 @@ func BuildCallGraph(spans []trace.Span) (*CallGraph, error) {
 	for _, span := range spans {
 		spanID := getSpanID(span)
 		node := &CallNode{
+			Span:       span,
 			SpanID:     spanID,
 			TraceID:    getTraceID(span),
 			Service:    span.Service,
@@ -288,15 +290,7 @@ func validateConcurrency(nodes []*CallNode) bool {
 }
 
 // 辅助函数
-func getSpanID(span trace.Span) string {
-	if spanID, exists := span.Attributes["otlp.span_id"]; exists {
-		if str, ok := spanID.(string); ok && str != "" {
-			return str
-		}
-	}
-	// 生成唯一ID：service:operation:timestamp
-	return fmt.Sprintf("%s:%s:%d", span.Service, span.Name, span.StartNanos)
-}
+func getSpanID(span trace.Span) string { return trace.SpanKey(span) }
 
 func getTraceID(span trace.Span) string {
 	if traceID, exists := span.Attributes["otlp.trace_id"]; exists {
@@ -304,7 +298,7 @@ func getTraceID(span trace.Span) string {
 			return str
 		}
 	}
-	return "unknown-trace"
+	return ""
 }
 
 func getParentSpanID(span trace.Span) string {

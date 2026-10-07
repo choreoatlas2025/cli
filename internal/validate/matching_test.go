@@ -15,7 +15,7 @@ func TestMatchingBindsInputsAndDistinctSpans(t *testing.T) {
 		{Step: "first", Call: "svc.repeat", Input: map[string]any{"expected": 200}},
 		{Step: "second", Call: "svc.repeat", Input: map[string]any{"expected": 201}},
 	}}
-	ops := map[string]map[string]spec.ServiceOperation{"svc": {"repeat": {Postconditions: map[string]string{"status": "request.body.expected == response.status"}}}}
+	ops := map[string]map[string]spec.ServiceOperation{"svc": {"repeat": {Postconditions: map[string]string{"status": "expected.body.expected == response.status"}}}}
 	tr := &trace.Trace{Spans: []trace.Span{
 		{Service: "svc", Name: "repeat", StartNanos: 1, EndNanos: 2, Attributes: map[string]any{"response.status": 200, "otlp.parent_span_id": ""}},
 		{Service: "svc", Name: "repeat", StartNanos: 3, EndNanos: 4, Attributes: map[string]any{"response.status": 201}},

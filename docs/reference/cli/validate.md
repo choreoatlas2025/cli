@@ -193,12 +193,29 @@ limits, or upgrading from a baseline without these fields, record a new baseline
 ## Cross-step values
 
 With semantic validation enabled, a successful step evaluates its `output` CEL
-expressions against `request`, `response`, `span` and `vars`. Subsequent steps can
+expressions against `expected`, `request`, `response`, `span` and `vars`. Subsequent steps can
 read the exported values through `${name.field}` in `input` and `vars.name.field`
 in conditions. Whole-value references retain their number, boolean, object or
 list type. References embedded in text accept scalar values only. Flat input
-maps appear as `request.body`; explicit `body`, `path`, `query` or `headers`
-maps retain that request structure.
+maps appear as `expected.body`; explicit `body`, `path`, `query` or `headers`
+maps retain that expected structure. `input` is a declaration, not proof of an
+actual request. Older expressions reading declared inputs through `request` must
+use `expected` instead; to verify a real request, compare its observed value with
+that expectation, for example `request.body.id == expected.body.id`.
+
+`request` and `response` contain captured attributes only. Body fields require
+`request.body` and `response.body`; there is no whole-attributes body fallback.
+Request path/query/headers map from their corresponding `request.*` attributes;
+`url.path` also maps to request path. Request method accepts `request.method`,
+`http.request.method` or `http.method`. Response status accepts `response.status`,
+`http.response.status_code`, `http.status_code` or `statusCode`. Conflicting aliases
+fail binding. Missing fields remain absent, including status (never default `0`).
+Other attributes remain available through `span.attributes`. Step results carry
+the matched instance and projection source attributes; the report input hash
+binds them to the captured file. Missing evidence blocks success and baseline
+recording when a rule requires that field; explicit `has()` checks can describe
+optional fields. An assertion solely about `expected` checks the declaration,
+not observed runtime behaviour.
 
 Flow steps publish outputs after their stage. Parallel siblings cannot read
 each other's outputs. DAG nodes see only their ancestors' successful outputs;

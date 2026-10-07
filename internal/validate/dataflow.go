@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/choreoatlas2025/cli/internal/evidence"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
@@ -132,21 +134,38 @@ func (e *evaluation) nativeValue(value ref.Val) (any, error) {
 }
 
 func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops map[string]map[string]spec.ServiceOperation, vars map[string]any, config spec.ValidationConfig, eval *evaluation) (StepResult, map[string]any) {
-	if result.Status != "PASS" || !config.Semantic {
+	if result.Status != "PASS" {
 		return result, nil
 	}
+	ref := evidence.Reference(span)
+	result.Evidence = &ref
+	if !config.Semantic {
+		return result, nil
+	}
+	projected, bindingErr := evidence.Bind(span)
+	if bindingErr != nil {
+		result.Status, result.Message, result.Issue = "FAIL", bindingErr.Error(), verdict.ExecutionError
+		return result, nil
+	}
+	result.Bindings = projected.Fields
 	svc, operation, _ := splitCall(step.Call)
 	if op, exists := ops[svc][operation]; exists {
 		var passed bool
 		result.Conditions, passed = eval.conditions(step, op, span, vars)
 		if !passed {
 			result.Status, result.Message = "FAIL", "semantic validation failed"
+			for _, condition := range result.Conditions {
+				if condition.Issue != "" {
+					result.Issue = condition.Issue
+					break
+				}
+			}
 			return result, nil
 		}
 	}
 	env, err := buildEvalEnvForStep(step, span, vars)
 	if err != nil {
-		result.Status, result.Message = "FAIL", err.Error()
+		result.Status, result.Message, result.Issue = "FAIL", err.Error(), evaluationIssue(err)
 		return result, nil
 	}
 	exports := map[string]any{}
@@ -161,7 +180,7 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 			exports[name], err = eval.nativeValue(value)
 		}
 		if err != nil {
-			result.Status, result.Message = "FAIL", fmt.Sprintf("output %s evaluation failed (%s): %v", name, phase, err)
+			result.Status, result.Message, result.Issue = "FAIL", fmt.Sprintf("output %s evaluation failed (%s): %v", name, phase, err), evaluationIssue(err)
 			return result, nil
 		}
 	}
@@ -187,7 +206,7 @@ func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]sp
 			produced := map[string]any{}
 			if match.node != nil {
 				node := match.node
-				span := trace.Span{Service: node.Service, Name: node.Operation, StartNanos: node.StartNanos, EndNanos: node.EndNanos, Attributes: node.Attributes}
+				span := node.Span
 				result, produced = evaluateStep(result, match.step, span, ops, vars, config, eval)
 			}
 			group[i-begin] = result

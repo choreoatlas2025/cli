@@ -15,6 +15,15 @@ type Identity struct {
 	TraceID string `json:"traceId,omitempty"`
 }
 
+// SpanKey identifies an explicit span or a legacy instance within its captured
+// input. It is not a fabricated distributed trace ID.
+func SpanKey(span Span) string {
+	if id, ok := span.Attributes["otlp.span_id"].(string); ok && id != "" {
+		return id
+	}
+	return fmt.Sprintf("%s:%s:%d", span.Service, span.Name, span.StartNanos)
+}
+
 func Identify(spans []Span) (Identity, error) {
 	id := Identity{Binding: "file-only"}
 	labelled := 0
