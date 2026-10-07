@@ -12,17 +12,12 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/evidence"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
 type ConditionResult = verdict.ConditionResult
 
 // Declarations are expected values; request/response are captured observations.
-func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any) (map[string]any, error) {
-	projected, err := evidence.Bind(sp)
-	if err != nil {
-		return nil, err
-	}
+func buildEvalEnvironment(step spec.FlowStep, projected evidence.Projection, vars map[string]any) map[string]any {
 	expected := map[string]any{}
 	if step.Input != nil {
 		input := resolveInput(step.Input, vars).(map[string]any)
@@ -38,7 +33,7 @@ func buildEvalEnvForStep(step spec.FlowStep, sp trace.Span, vars map[string]any)
 			expected["body"] = input
 		}
 	}
-	return map[string]any{"expected": expected, "request": projected.Request, "response": projected.Response, "span": projected.Span, "vars": vars}, nil
+	return map[string]any{"expected": expected, "request": projected.Request, "response": projected.Response, "span": projected.Span, "vars": vars}
 }
 
 // Evaluation errors remain failures. Missing keys and unresolved declared
@@ -85,24 +80,17 @@ func (e *evaluation) boolean(expr string, envVars map[string]any) (bool, string,
 // Declared conditions must evaluate successfully to a boolean. Evaluation
 // errors are failures, not skipped evidence.
 func (e *evaluation) conditions(
-	step spec.FlowStep,
 	op spec.ServiceOperation,
-	sp trace.Span,
-	vars map[string]any,
+	envVars map[string]any,
 ) ([]ConditionResult, bool) {
 
 	results := []ConditionResult{}
 	passAll := true
 
-	envVars, envErr := buildEvalEnvForStep(step, sp, vars)
-
 	// 预条件
 	for _, name := range sortedKeys(op.Preconditions) {
 		expr := op.Preconditions[name]
-		ok, phase, err := false, "binding", envErr
-		if err == nil {
-			ok, phase, err = e.boolean(expr, envVars)
-		}
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "pre", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"
@@ -123,10 +111,7 @@ func (e *evaluation) conditions(
 	// 后置条件
 	for _, name := range sortedKeys(op.Postconditions) {
 		expr := op.Postconditions[name]
-		ok, phase, err := false, "binding", envErr
-		if err == nil {
-			ok, phase, err = e.boolean(expr, envVars)
-		}
+		ok, phase, err := e.boolean(expr, envVars)
 		cr := ConditionResult{Kind: "post", Name: name, Expr: expr}
 		if err != nil {
 			cr.Status = "FAIL"

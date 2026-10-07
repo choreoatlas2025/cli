@@ -148,10 +148,11 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 		return result, nil
 	}
 	result.Bindings = projected.Fields
+	env := buildEvalEnvironment(step, projected, vars)
 	svc, operation, _ := splitCall(step.Call)
 	if op, exists := ops[svc][operation]; exists {
 		var passed bool
-		result.Conditions, passed = eval.conditions(step, op, span, vars)
+		result.Conditions, passed = eval.conditions(op, env)
 		if !passed {
 			result.Status, result.Message = "FAIL", "semantic validation failed"
 			for _, condition := range result.Conditions {
@@ -162,11 +163,6 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 			}
 			return result, nil
 		}
-	}
-	env, err := buildEvalEnvForStep(step, span, vars)
-	if err != nil {
-		result.Status, result.Message, result.Issue = "FAIL", err.Error(), evaluationIssue(err)
-		return result, nil
 	}
 	exports := map[string]any{}
 	names := make([]string, 0, len(step.Output))
@@ -187,7 +183,7 @@ func evaluateStep(result StepResult, step spec.FlowStep, span trace.Span, ops ma
 	return result, exports
 }
 
-func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]spec.ServiceOperation, config spec.ValidationConfig, eval *evaluation) []StepResult {
+func evaluateFlowMatches(matches []matchedStep, ops map[string]map[string]spec.ServiceOperation, config spec.ValidationConfig, eval *evaluation) []StepResult {
 	var results []StepResult
 	vars := map[string]any{}
 	for begin := 0; begin < len(matches); {
@@ -213,8 +209,8 @@ func evaluateFlowMatches(matches []matchedFlowStep, ops map[string]map[string]sp
 			for name, value := range produced {
 				if owner, exists := owners[name]; exists {
 					conflicts[name] = true
-					group[owner].Status, group[owner].Message = "FAIL", "ambiguous parallel output variable "+name
-					group[i-begin].Status, group[i-begin].Message = "FAIL", "ambiguous parallel output variable "+name
+					group[owner].Status, group[owner].Message, group[owner].Issue = "FAIL", "ambiguous parallel output variable "+name, verdict.InvalidContract
+					group[i-begin].Status, group[i-begin].Message, group[i-begin].Issue = "FAIL", "ambiguous parallel output variable "+name, verdict.InvalidContract
 				}
 				owners[name], exports[name] = i-begin, value
 			}
@@ -260,4 +256,32 @@ func graphVariables(graph *spec.GraphSpec, id string, order []string, exports ma
 		}
 	}
 	return vars, nil
+}
+
+// evaluateGraphMatches owns DAG variable visibility, not call selection.
+func evaluateGraphMatches(matches []matchedStep, graph *spec.GraphSpec, ops map[string]map[string]spec.ServiceOperation, config spec.ValidationConfig, eval *evaluation) []StepResult {
+	var results []StepResult
+	exports := map[string]map[string]any{}
+	order := make([]string, len(matches))
+	for i, match := range matches {
+		order[i] = match.step.Step
+	}
+	for _, match := range matches {
+		if eval.ctx.Err() != nil {
+			return results
+		}
+		r := match.result
+		if match.node != nil && r.Status == "PASS" {
+			ref := evidence.Reference(match.node.Span)
+			r.Evidence = &ref
+			vars, err := graphVariables(graph, match.step.Step, order, exports)
+			if err != nil {
+				r.Status, r.Message, r.Issue = "FAIL", err.Error(), verdict.InvalidContract
+			} else {
+				r, exports[match.step.Step] = evaluateStep(r, match.step, match.node.Span, ops, vars, config, eval)
+			}
+		}
+		results = append(results, r)
+	}
+	return results
 }

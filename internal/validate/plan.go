@@ -15,6 +15,7 @@ import (
 	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	"gopkg.in/yaml.v3"
@@ -154,17 +155,17 @@ type evaluation struct {
 
 func (p *ContractPlan) ValidateTrace(tr *trace.Trace) ([]StepResult, bool) {
 	if tr == nil {
-		return []StepResult{{Step: "trace-input", Status: "FAIL", Message: "nil trace"}}, false
+		return []StepResult{{Step: "trace-input", Status: "FAIL", Issue: verdict.MissingEvidence, Message: "nil trace"}}, false
 	}
 	if len(tr.Spans) > p.config.Limits.MaxSpans {
-		return []StepResult{{Step: "trace-budget", Call: "internal", Status: "FAIL", Message: "trace span count exceeds configured limit"}}, false
+		return []StepResult{{Step: "trace-budget", Call: "internal", Status: "FAIL", Issue: verdict.ExecutionError, Message: "trace span count exceeds configured limit"}}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.Limits.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	eval := &evaluation{plan: p, ctx: ctx, cancel: cancel}
 	results, _ := validateAgainstTrace(p.flow, p.operations, tr, p.config, eval)
 	if err := ctx.Err(); err != nil {
-		results = append(results, StepResult{Step: "validation-budget", Call: "internal", Status: "FAIL", Message: err.Error()})
+		results = append(results, StepResult{Step: "validation-budget", Call: "internal", Status: "FAIL", Issue: verdict.ExecutionError, Message: err.Error()})
 	}
 	return results, AllStepsPassed(results)
 }
