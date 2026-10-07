@@ -4,6 +4,7 @@ package validate
 
 import (
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 	"regexp"
 	"strings"
 
@@ -13,14 +14,7 @@ import (
 	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
-// 条件结果
-type ConditionResult struct {
-	Kind    string `json:"kind"` // "pre" | "post"
-	Name    string `json:"name"`
-	Expr    string `json:"expr"`
-	Status  string `json:"status"`  // "PASS" | "FAIL" | "SKIP"
-	Message string `json:"message"` // 失败/跳过原因
-}
+type ConditionResult = verdict.ConditionResult
 
 // 将 FlowSpec 的 input + span.attributes 投影为 CEL 环境可用的变量
 // 约定：

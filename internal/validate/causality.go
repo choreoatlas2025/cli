@@ -4,6 +4,7 @@ package validate
 
 import (
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 	"sort"
 
 	"github.com/choreoatlas2025/cli/internal/spec"
@@ -388,13 +389,7 @@ func GetCallGraphStats(graph *CallGraph) map[string]any {
 	return stats
 }
 
-// EdgeViolation 表示边约束违规
-type EdgeViolation struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Type    string `json:"type"` // "cycle", "causality", "overlap"
-	Message string `json:"message"`
-}
+type EdgeViolation = verdict.EdgeViolation
 
 // DetectCycle 检测调用图中的循环依赖
 func (g *CallGraph) DetectCycle() (bool, []string) {

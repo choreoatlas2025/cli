@@ -4,6 +4,7 @@ package validate
 
 import (
 	"fmt"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 	"sort"
 	"strings"
 
@@ -11,15 +12,8 @@ import (
 	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
-// StepResult 表示单个步骤的验证结果
-type StepResult struct {
-	Step       string            `json:"step"`
-	Call       string            `json:"call"`
-	Status     string            `json:"status"` // PASS / FAIL
-	Message    string            `json:"message,omitempty"`
-	Conditions []ConditionResult `json:"conditions,omitempty"`
-	Violations []EdgeViolation   `json:"violations,omitempty"`
-}
+// StepResult is the shared, renderer-independent validation record.
+type StepResult = verdict.StepResult
 
 // CausalityMode represents the causality checking mode
 type CausalityMode string
