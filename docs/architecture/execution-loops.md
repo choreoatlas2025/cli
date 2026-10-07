@@ -23,6 +23,25 @@
 - 生成草案不写文件。协调层负责完整生成集的校验与写入边界。
 - 仓库构建和发布 CI 属于工程交付，不能由此推导 CE 提供客户 CI 服务。
 
+## 接口与依赖方向
+
+| 边界 | 入口与输出 | 状态及反馈的归属 |
+|---|---|---|
+| E02 → E04/E05 | `CompilePlan` → 冻结的 `ContractPlan`；变更契约或配置必须重新编译 | 编译失败为 `invalid_contract`，不能绑定运行 span |
+| E03 → E04 | `input.Snapshot`、`trace.Parse` → 捕获输入与 span；`SpanKey` 仅在输入范围内定位 | 没有 trace ID 时仅有文件身份；不能假称分布式身份已证明 |
+| E04 → E05 | `matchFlowSteps` / `matchGraphSteps` → `matchedStep`（契约步骤、确切调用实例、结构结果） | `structure_mismatch` 留在匹配结果；匹配器不执行 CEL、不发布输出 |
+| E05 → E06 | `evidence.Bind` → 观测投影与属性来源；`evaluateStep` → 步骤/条件记录及成功输出 | `missing_evidence`、`rule_violation`、`execution_error` 分开；结构未通过不求值 |
+| E06 → E07/E01 | `result.New` → 独立拥有的 `result.Report`；CLI 每次只生成一份最终记录 | `verdict` 决定成功；报告、退出码与指标不能重新改判 |
+| E08 → E01 | `discovery.FlowYAML` / `BuildServiceSpecFiles` → 字符串/文件字节集 | 草案资格失败交回协调层；`discoverAndPersist` / `initializeProject` 校验并提交完整生成集 |
+
+`internal/spec/opname.go` 是 E04 与 E08 共用的操作身份协议；`internal/fileio` 是本地写入载体。共享辅助载体不等于混合各 loop 的判定责任。
+
+`request`、`response` 是实际观测；`expected` 是契约声明经当前变量解析后的值；`vars` 是本次运行中成功步骤的输出。声明类断言不能证明实际请求；运行规则须显式比较观测和预期。字段来源记录的是投影绑定，不能当成 CEL 实际读取了全部字段的记录。原有通过 `request` 读取声明的表达式须迁移到 `expected`，不能保留静默回退。
+
+执行错误和证据不足继续使用失败退出码，增加原因字段，不引入自动放过或新的客户 CI 服务。JSON 与 HTML 保留步骤证据，JUnit 的 testcase `system-out` 包含完整步骤记录（此前只有条件数组）。
+
+依赖检查在 `internal/architecture/boundaries_test.go` 中：中立判定无领域依赖，输入/证据不得依赖契约或求值，发现不得拥有写入，匹配不得求值，报告和基线不得依赖验证算法。每次 `go test ./...` 都执行这些约束。
+
 ## 顺序实施与验收
 
 每项本地检查通过并独立提交后，才进入下一项。每次提交的检查记录保存在本地 `bin/execution-foundation-20261007/`，Git 提交绑定源码版本；日志是执行证据，不能代替功能或发布准入。

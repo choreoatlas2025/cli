@@ -25,9 +25,10 @@ func TestExecutionDependencies(t *testing.T) {
 		"spec":        "input trace",
 		"validate":    "evidence input spec trace verdict",
 		"discovery":   "spec trace validate",
-		"result":      "input spec trace validate",
-		"baseline":    "fileio input result spec validate",
-		"report/html": "fileio result validate",
+		"result":      "input spec trace verdict",
+		"baseline":    "fileio input result spec verdict",
+		"report":      "fileio report/html result verdict",
+		"report/html": "fileio result verdict",
 	}
 	const prefix = "github.com/choreoatlas2025/cli/internal/"
 	for pkg, dependencies := range allowed {

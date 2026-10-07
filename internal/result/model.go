@@ -11,7 +11,7 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
-	"github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 )
 
 type GateResult struct {
@@ -80,14 +80,14 @@ func (s CoverageSummary) ConditionsRate(skipAsFail bool) float64 {
 
 // Measure uses the same step success predicate as the final decision. SKIP is
 // exposed separately; the legacy uncoveredSteps field lists failed calls.
-func Measure(steps []validate.StepResult) CoverageSummary {
+func Measure(steps []verdict.StepResult) CoverageSummary {
 	s := CoverageSummary{ServiceCoverage: map[string]int{}, UncoveredSteps: []string{}}
 	for _, step := range steps {
 		s.StepsTotal++
 		switch {
-		case validate.StepPassed(step):
+		case verdict.StepPassed(step):
 			s.StepsPass++
-		case step.Status == "SKIP":
+		case step.Status == "SKIP" && step.Issue == "":
 			s.StepsSkip++
 		default:
 			s.StepsFail++
@@ -98,10 +98,10 @@ func Measure(steps []validate.StepResult) CoverageSummary {
 		}
 		for _, condition := range step.Conditions {
 			s.ConditionsTotal++
-			switch condition.Status {
-			case "PASS":
+			switch {
+			case verdict.ConditionPassed(condition):
 				s.ConditionsPass++
-			case "SKIP":
+			case condition.Status == "SKIP" && condition.Issue == "":
 				s.ConditionsSkip++
 			default:
 				s.ConditionsFail++
@@ -112,14 +112,14 @@ func Measure(steps []validate.StepResult) CoverageSummary {
 	return s
 }
 
-func Decision(steps []validate.StepResult, gate *GateResult) validate.Outcome {
+func Decision(steps []verdict.StepResult, gate *GateResult) verdict.Outcome {
 	if gate == nil {
-		return validate.FinalOutcome(steps, false, true)
+		return verdict.FinalOutcome(steps, false, true)
 	}
-	return validate.FinalOutcome(steps, gate.Checked, gate.Passed)
+	return verdict.FinalOutcome(steps, gate.Checked, gate.Passed)
 }
 
-func ExitCode(outcome validate.Outcome) int {
+func ExitCode(outcome verdict.Outcome) int {
 	switch outcome.Status {
 	case "PASS":
 		return 0
@@ -134,19 +134,20 @@ func ExitCode(outcome validate.Outcome) int {
 
 // Report is the neutral record consumed by the JSON, JUnit and HTML renderers.
 type Report struct {
-	validate.Outcome
-	ExitCode    int                   `json:"exitCode"`
-	Inputs      *InputBinding         `json:"inputs,omitempty"`
-	Timestamp   time.Time             `json:"timestamp"`
-	TotalSteps  int                   `json:"totalSteps"`
-	PassedSteps int                   `json:"passedSteps"`
-	FailedSteps int                   `json:"failedSteps"`
-	Steps       []validate.StepResult `json:"steps"`
-	Summary     CoverageSummary       `json:"summary"`
-	GateResult  *GateResult           `json:"gateResult,omitempty"`
+	verdict.Outcome
+	ExitCode    int                  `json:"exitCode"`
+	Inputs      *InputBinding        `json:"inputs,omitempty"`
+	Timestamp   time.Time            `json:"timestamp"`
+	TotalSteps  int                  `json:"totalSteps"`
+	PassedSteps int                  `json:"passedSteps"`
+	FailedSteps int                  `json:"failedSteps"`
+	Steps       []verdict.StepResult `json:"steps"`
+	Summary     CoverageSummary      `json:"summary"`
+	GateResult  *GateResult          `json:"gateResult,omitempty"`
 }
 
-func New(steps []validate.StepResult, gate *GateResult, inputs *InputBinding) Report {
+func New(steps []verdict.StepResult, gate *GateResult, inputs *InputBinding) Report {
+	steps, gate, inputs = freeze(steps, gate, inputs)
 	summary := Measure(steps)
 	if gate != nil {
 		fields := map[string]*float64{

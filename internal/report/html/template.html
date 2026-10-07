@@ -341,10 +341,23 @@ function renderStepsTable(steps) {
     row.append(el('td', 'step-number', index + 1), el('td', '', step.step || step.node || ''), el('td', 'call-name', step.call || ''));
     const status = el('td');
     status.appendChild(badge(step.status));
-    row.append(status, el('td', 'message', step.message || ''));
+    const message = el('td', 'message', step.message || '');
+    if (step.issue) message.appendChild(el('div', '', step.issue));
+    if (step.evidence) {
+      const evidence = el('details');
+      evidence.appendChild(el('summary', '', 'Evidence: ' + (step.evidence.spanId || step.evidence.key || '')));
+      const sources = el('pre', '', JSON.stringify({ source: step.evidence, fields: step.bindings || [] }, null, 2));
+      evidence.appendChild(sources);
+      message.appendChild(evidence);
+    }
+    row.append(status, message);
     const cell = el('td');
     const conditions = el('div', 'conditions');
-    for (const condition of step.conditions || []) conditions.appendChild(badge(condition.status, `${condition.kind}:${condition.name}`));
+    for (const condition of step.conditions || []) {
+      const item = badge(condition.status, `${condition.kind}:${condition.name}`);
+      item.title = [condition.issue, condition.message].filter(Boolean).join(': ');
+      conditions.appendChild(item);
+    }
     cell.appendChild(conditions);
     row.appendChild(cell);
     tbody.appendChild(row);

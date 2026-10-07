@@ -14,6 +14,7 @@ import (
 	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 )
 
 func runBaseline(args []string) {
@@ -67,8 +68,8 @@ func runBaselineRecord(args []string) {
 	}
 
 	// Perform validation to get results
-	results, ok := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr, config)
-	if !ok {
+	results, _ := validate.ValidateAgainstTrace(contract.Flow, contract.Operations, tr, config)
+	if !verdict.AllStepsPassed(results) {
 		fmt.Fprintln(os.Stderr, "Validation failed; baseline not recorded.")
 		os.Exit(exitcode.ValidationFailed)
 	}

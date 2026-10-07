@@ -9,7 +9,7 @@ import (
 	"github.com/choreoatlas2025/cli/internal/fileio"
 	"github.com/choreoatlas2025/cli/internal/result"
 
-	"github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 )
 
 //go:embed template.html
@@ -17,15 +17,15 @@ var htmlTemplate string
 
 // HTMLData represents the data structure passed to the HTML template
 type HTMLData struct {
-	validate.Outcome
-	ExitCode   int                   `json:"exitCode"`
-	Inputs     *InputBinding         `json:"inputs,omitempty"`
-	Summary    CoverageSummary       `json:"summary"`
-	Steps      []validate.StepResult `json:"steps"`
-	Spans      []SpanInfo            `json:"spans"`
-	Graph      interface{}           `json:"graph,omitempty"` // For DAG mode
-	GateResult *GateResult           `json:"gateResult,omitempty"`
-	Edition    string                `json:"edition"` // Always CE; retained in the report JSON format.
+	verdict.Outcome
+	ExitCode   int                  `json:"exitCode"`
+	Inputs     *InputBinding        `json:"inputs,omitempty"`
+	Summary    CoverageSummary      `json:"summary"`
+	Steps      []verdict.StepResult `json:"steps"`
+	Spans      []SpanInfo           `json:"spans"`
+	Graph      interface{}          `json:"graph,omitempty"` // For DAG mode
+	GateResult *GateResult          `json:"gateResult,omitempty"`
+	Edition    string               `json:"edition"` // Always CE; retained in the report JSON format.
 }
 
 type InputBinding = result.InputBinding
@@ -74,23 +74,19 @@ func WriteHTMLReport(outputPath string, data HTMLData) error {
 }
 
 // BuildHTMLData creates HTMLData from validation results and spans
-func BuildHTMLData(steps []validate.StepResult, spans []SpanInfo, gateResult *GateResult) HTMLData {
-	report := result.New(steps, gateResult, nil)
-	summary := summaryFromMetrics(report.Summary, spans)
+func BuildHTMLData(steps []verdict.StepResult, spans []SpanInfo, gateResult *GateResult) HTMLData {
+	return FromReport(result.New(steps, gateResult, nil), spans)
+}
 
-	return HTMLData{
-		Outcome:    report.Outcome,
-		ExitCode:   report.ExitCode,
-		Summary:    summary,
-		Steps:      steps,
-		Spans:      spans,
-		GateResult: gateResult,
-		Edition:    "CE",
-	}
+// FromReport renders an already decided record; it never recomputes outcomes.
+func FromReport(report result.Report, spans []SpanInfo) HTMLData {
+	return HTMLData{Outcome: report.Outcome, ExitCode: report.ExitCode, Inputs: report.Inputs,
+		Summary: summaryFromMetrics(report.Summary, spans), Steps: report.Steps,
+		Spans: spans, GateResult: report.GateResult, Edition: "CE"}
 }
 
 // calculateSummary computes coverage summary from step results
-func calculateSummary(steps []validate.StepResult, spans []SpanInfo) CoverageSummary {
+func calculateSummary(steps []verdict.StepResult, spans []SpanInfo) CoverageSummary {
 	return summaryFromMetrics(result.Measure(steps), spans)
 }
 

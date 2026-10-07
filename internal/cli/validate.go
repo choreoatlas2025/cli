@@ -12,9 +12,11 @@ import (
 	"github.com/choreoatlas2025/cli/internal/baseline"
 	"github.com/choreoatlas2025/cli/internal/cli/exitcode"
 	"github.com/choreoatlas2025/cli/internal/input"
+	"github.com/choreoatlas2025/cli/internal/report"
 	"github.com/choreoatlas2025/cli/internal/result"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 )
 
 func runValidate(args []string) {
@@ -132,11 +134,11 @@ func runValidate(args []string) {
 
 	// Execute threshold gate (with optional baseline)
 	gateResult = baseline.EvaluateGate(results, thresholds, baselineData)
-	outcome := result.Decision(results, gateResult)
+	var inputs *result.InputBinding
 
 	// Generate report (if format and path specified)
 	if *reportFormat != "" && *reportOut != "" {
-		inputs := &result.InputBinding{Contract: contract.Identity(), TraceHash: execution.TraceHash, Version: execution.Version, GitCommit: execution.GitCommit, BuildChannel: execution.BuildChannel, Semantic: execution.Config.Semantic, Causality: execution.Config.Causality, ToleranceMs: execution.Config.ToleranceMs, ValidatorHash: execution.ValidatorHash, TraceIdentity: execution.TraceIdentity}
+		inputs = &result.InputBinding{Contract: contract.Identity(), TraceHash: execution.TraceHash, Version: execution.Version, GitCommit: execution.GitCommit, BuildChannel: execution.BuildChannel, Semantic: execution.Config.Semantic, Causality: execution.Config.Causality, ToleranceMs: execution.Config.ToleranceMs, ValidatorHash: execution.ValidatorHash, TraceIdentity: execution.TraceIdentity}
 		inputs.Policy = gateResult.Details
 		inputs.Limits = config.Limits
 		if plan != nil {
@@ -146,6 +148,10 @@ func runValidate(args []string) {
 			inputs.BaselineProvenance = &baselineData.Provenance
 			inputs.BaselineHash = baselineHash
 		}
+	}
+	decided := result.New(results, gateResult, inputs)
+	outcome := decided.Outcome
+	if *reportFormat != "" && *reportOut != "" {
 		var format ReportFormat
 		switch *reportFormat {
 		case "json":
@@ -158,7 +164,7 @@ func runValidate(args []string) {
 			exitErr(fmt.Errorf("unsupported report format: %s", *reportFormat))
 		}
 
-		if err := WriteReport(*reportOut, format, results, tr.Spans, gateResult, inputs); err != nil {
+		if err := report.Write(*reportOut, format, decided, reportSpans(tr.Spans)); err != nil {
 			exitErr(fmt.Errorf("failed to generate report: %w", err))
 		}
 		fmt.Printf("Report saved: %s (format: %s)\n", *reportOut, *reportFormat)
@@ -166,7 +172,7 @@ func runValidate(args []string) {
 
 	// Console output
 	for _, r := range results {
-		if r.Status == "PASS" {
+		if verdict.StepPassed(r) {
 			fmt.Printf("[PASS] %s (%s)\n", r.Step, r.Call)
 		} else {
 			fmt.Printf("[FAIL] %s (%s) - %s\n", r.Step, r.Call, r.Message)

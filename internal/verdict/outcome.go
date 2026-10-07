@@ -29,7 +29,7 @@ func StepPassed(step StepResult) bool {
 		return false
 	}
 	for _, cond := range step.Conditions {
-		if cond.Status != "PASS" || cond.Issue != "" {
+		if !ConditionPassed(cond) {
 			return false
 		}
 	}
@@ -47,4 +47,8 @@ func FinalOutcome(steps []StepResult, gateChecked, gatePassed bool) Outcome {
 		o.Success = true
 	}
 	return o
+}
+
+func ConditionPassed(condition ConditionResult) bool {
+	return condition.Status == "PASS" && condition.Issue == ""
 }

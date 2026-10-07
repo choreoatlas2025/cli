@@ -112,7 +112,7 @@ func TestWriteJSONReport(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-report.json"
-	err := writeJSONReport(tempFile, steps, nil) // Pass nil gateResult for basic test
+	err := WriteReport(tempFile, ReportJSON, steps, nil, nil) // Pass nil gateResult for basic test
 	if err != nil {
 		t.Fatalf("writeJSONReport failed: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestWriteJUnitReport(t *testing.T) {
 	}
 
 	tempFile := "/tmp/test-junit.xml"
-	err := writeJUnitReport(tempFile, steps, nil) // Pass nil gateResult for basic test
+	err := WriteReport(tempFile, ReportJUnit, steps, nil, nil) // Pass nil gateResult for basic test
 	if err != nil {
 		t.Fatalf("writeJUnitReport failed: %v", err)
 	}
@@ -235,26 +235,6 @@ func TestWriteJUnitReport(t *testing.T) {
 	// 验证覆盖度摘要在最终的system-out中
 	if !strings.Contains(content, `"stepsTotal": 2`) {
 		t.Error("JUnit XML should contain coverage summary in system-out")
-	}
-}
-
-func TestXmlEscape(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"normal text", "normal text"},
-		{"text with & ampersand", "text with &amp; ampersand"},
-		{"<tag>content</tag>", "&lt;tag&gt;content&lt;/tag&gt;"},
-		{`"quoted" and 'single'`, "&quot;quoted&quot; and &apos;single&apos;"},
-		{"mixed <>&\"'", "mixed &lt;&gt;&amp;&quot;&apos;"},
-	}
-
-	for _, tt := range tests {
-		result := xmlEscape(tt.input)
-		if result != tt.expected {
-			t.Errorf("xmlEscape(%q) = %q, expected %q", tt.input, result, tt.expected)
-		}
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 
 	"github.com/choreoatlas2025/cli/internal/result"
 	"github.com/choreoatlas2025/cli/internal/spec"
-	"github.com/choreoatlas2025/cli/internal/validate"
+	"github.com/choreoatlas2025/cli/internal/verdict"
 )
 
 // BaselineData represents a recorded baseline for comparison
@@ -64,12 +64,12 @@ func ValidateThresholds(t ThresholdConfig) error {
 }
 
 // RecordBaseline creates a baseline from validation results
-func RecordBaseline(contract *spec.ContractSnapshot, results []validate.StepResult, provenance spec.ExecutionIdentity) (*BaselineData, error) {
+func RecordBaseline(contract *spec.ContractSnapshot, results []verdict.StepResult, provenance spec.ExecutionIdentity) (*BaselineData, error) {
 	flowSpec := contract.Flow
 	if strings.TrimSpace(flowSpec.Info.Title) == "" {
 		return nil, fmt.Errorf("invalid baseline contract: info.title must not be empty")
 	}
-	if !validate.AllStepsPassed(results) || len(results) != flowSpec.GetStepsCount() {
+	if !verdict.AllStepsPassed(results) || len(results) != flowSpec.GetStepsCount() {
 		return nil, ErrIncompleteValidation
 	}
 	expected := map[string]bool{}
@@ -82,7 +82,7 @@ func RecordBaseline(contract *spec.ContractSnapshot, results []validate.StepResu
 		}
 		delete(expected, result.Step)
 		for _, cond := range result.Conditions {
-			if cond.Status != "PASS" {
+			if !verdict.ConditionPassed(cond) {
 				return nil, ErrIncompleteValidation
 			}
 		}
@@ -95,7 +95,7 @@ func RecordBaseline(contract *spec.ContractSnapshot, results []validate.StepResu
 	// Extract covered steps (PASS status)
 	var coveredSteps []string
 	for _, result := range results {
-		if result.Status == "PASS" {
+		if verdict.StepPassed(result) {
 			coveredSteps = append(coveredSteps, result.Step)
 		}
 	}
@@ -107,7 +107,7 @@ func RecordBaseline(contract *spec.ContractSnapshot, results []validate.StepResu
 			stepConditions := make(map[string]bool)
 			for _, cond := range result.Conditions {
 				condKey := fmt.Sprintf("%s:%s", cond.Kind, cond.Name)
-				stepConditions[condKey] = cond.Status == "PASS"
+				stepConditions[condKey] = verdict.ConditionPassed(cond)
 			}
 			conditions[result.Step] = stepConditions
 		}
@@ -276,7 +276,7 @@ func ValidateCompatibility(b *BaselineData, contract *spec.ContractSnapshot) err
 // EvaluateGate always applies absolute floors. Baselines add independent limits
 // on relative degradation; they never reinterpret or replace the floors.
 // EvaluateGate checks validation results against baseline thresholds
-func EvaluateGate(results []validate.StepResult, thresholds ThresholdConfig, baseline *BaselineData) *GateResult {
+func EvaluateGate(results []verdict.StepResult, thresholds ThresholdConfig, baseline *BaselineData) *GateResult {
 	if err := ValidateThresholds(thresholds); err != nil {
 		return &GateResult{Checked: true, Passed: false, Violations: []string{err.Error()}}
 	}
