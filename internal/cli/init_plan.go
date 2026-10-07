@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choreoatlas2025/cli/internal/discovery"
 	"github.com/choreoatlas2025/cli/internal/input"
 	"github.com/choreoatlas2025/cli/internal/schemas"
 	"github.com/choreoatlas2025/cli/internal/spec"
@@ -116,13 +117,13 @@ func renderInitFiles(opts initOptions, assets fs.FS) ([]generatedFile, string, e
 			{".flowspec.yaml", "./services"},
 			{"flows/" + deriveFlowFileName(opts.TracePath), "../services"},
 		} {
-			generated, err := generateFlowYAML(tr, opts.Title, output.services)
+			generated, err := discovery.FlowYAML(tr, opts.Title, output.services)
 			if err != nil {
 				return nil, "", err
 			}
 			add(output.path, []byte(generated))
 		}
-		services, err := spec.BuildServiceSpecFiles(tr.Spans)
+		services, err := discovery.BuildServiceSpecFiles(tr.Spans)
 		if err != nil {
 			return nil, "", err
 		}

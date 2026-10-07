@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
 // SPDX-License-Identifier: Apache-2.0
-package spec
+package discovery
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"gopkg.in/yaml.v3"
 )
@@ -25,17 +24,12 @@ func TestGenerateServiceSpecs_HTTPAttributesToConditions(t *testing.T) {
 		},
 	}
 
-	dir := t.TempDir()
-	if err := GenerateServiceSpecs(spans, dir); err != nil {
-		t.Fatalf("GenerateServiceSpecs: %v", err)
-	}
-
-	// Load generated YAML
-	data, err := os.ReadFile(filepath.Join(dir, "svc.servicespec.yaml"))
+	files, err := BuildServiceSpecFiles(spans)
 	if err != nil {
-		t.Fatalf("read servicespec: %v", err)
+		t.Fatal(err)
 	}
-	var ss ServiceSpecFile
+	data := files["svc.servicespec.yaml"]
+	var ss spec.ServiceSpecFile
 	if err := yaml.Unmarshal(data, &ss); err != nil {
 		t.Fatalf("parse servicespec: %v", err)
 	}

@@ -7,11 +7,11 @@
 | E01 本地协调与初始化 | 命令参数、模板、文件路径 | `internal/cli`、`templates` | 调用其他载体，提交本地输出 | 参数错误不进入内核；生成集验收失败不覆盖已有文件 |
 | E02 契约准备 | 捕获的契约文件与配置 | `internal/spec`、`internal/schemas`、`validate/plan.go`、`validate/static.go` | 契约快照、不可变编译计划 | Schema、引用、图和表达式错误归契约准备；不可伪装成运行通过 |
 | E03 本地输入捕获 | 本地 trace 文件 | `internal/input`、`internal/trace` | 捕获字节、文件身份、span 与字段存在性 | 身份和时间不合格反馈输入层；缺失字段不能变成零值证据 |
-| E04 调用实例匹配 | 编译契约、已捕获 span | `internal/validate` 的结构匹配与数据流调度 | 步骤与确切 span 实例、关系检查、变量可见域 | span 不复用；Flow/DAG 保留各自关系语义，不能自行构造请求证据 |
-| E05 证据绑定与规则求值 | 匹配实例、客户表达式、可见变量 | 证据投影器与 CEL 求值器 | 字段来源、条件判定、成功步骤输出 | 声明与观测分离；缺失证据、规则违反、执行错误分别记录 |
+| E04 调用实例匹配 | 编译契约、已捕获 span | `validate/flow_match.go`、`validate/graph_match.go`、`validate/dataflow.go` | 步骤与确切 span 实例、关系检查、变量可见域 | span 不复用；Flow/DAG 保留各自关系语义，不能自行构造请求证据 |
+| E05 证据绑定与规则求值 | 匹配实例、客户表达式、可见变量 | `internal/evidence`、`validate/cel.go` | 字段来源、条件判定、成功步骤输出 | 声明与观测分离；缺失证据、规则违反、执行错误分别记录 |
 | E06 本地结果与基线 | 统一步骤结果、输入身份、阈值 | `internal/verdict`、`internal/result`、`internal/baseline` | 单一最终结论、指标与本地基线比较 | 不充分或失败证据不能被阈值改判成功，不能录为成功基线 |
 | E07 本地报告与输出 | 已判定结果、捕获的展示数据 | `internal/report`、`internal/fileio` | JSON、JUnit、HTML 与原子文件输出 | 各格式消费同一结果，不重新解释判定；外部字段安全展示 |
-| E08 契约草案生成 | 已捕获 trace | 发现算法与草案资格检查 | 带观察性质的契约草案，交 E01 写入 | 保留实例和关系；不能把样本观察升级成客户业务规则 |
+| E08 契约草案生成 | 已捕获 trace | `internal/discovery`（复用调用图及契约检查） | 带观察性质的契约草案，交 E01 写入 | 保留实例和关系；不能把样本观察升级成客户业务规则 |
 
 ## 核心不变量
 

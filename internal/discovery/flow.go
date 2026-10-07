@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 ChoreoAtlas contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package cli
+package discovery
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ import (
 // requirements. Preserve every call instance and every available parent link.
 // Timing constraints describe adjacent observed siblings, never a parent's
 // completion before the start of its own child.
-func buildDiscoveredFlow(tr *trace.Trace, title, outServices string) (*spec.FlowSpec, error) {
+func BuildFlow(tr *trace.Trace, title, outServices string) (*spec.FlowSpec, error) {
 	if tr == nil || len(tr.Spans) == 0 {
 		return nil, fmt.Errorf("invalid discovery input: trace contains no spans")
 	}
@@ -56,7 +56,7 @@ func buildDiscoveredFlow(tr *trace.Trace, title, outServices string) (*spec.Flow
 		ids[node.SpanID] = id
 		s := trace.Span{Service: node.Service, Name: node.Operation, Attributes: node.Attributes}
 		flow.Graph.Nodes = append(flow.Graph.Nodes, spec.GraphNode{ID: id, Call: node.Service + "." + spec.ComputeOperationID(s)})
-		flow.Services[node.Service] = spec.ServiceBinding{Spec: filepath.ToSlash(filepath.Join(outServices, spec.ServiceSpecFilename(node.Service)))}
+		flow.Services[node.Service] = spec.ServiceBinding{Spec: filepath.ToSlash(filepath.Join(outServices, ServiceSpecFilename(node.Service)))}
 	}
 	// External parent IDs are retained as distinct sibling groups, rather than
 	// treating unrelated partial captures as children of a fabricated root.
@@ -84,7 +84,7 @@ func buildDiscoveredFlow(tr *trace.Trace, title, outServices string) (*spec.Flow
 // Check structure only. Observations containing failed attempts are legitimate
 // inputs for discovery; CEL requirements are qualified separately and reviewed
 // by the user. This must run before any generated destination is replaced.
-func qualifyDiscoveredStructure(flow *spec.FlowSpec, tr *trace.Trace) error {
+func qualifyStructure(flow *spec.FlowSpec, tr *trace.Trace) error {
 	config := spec.DefaultValidationConfig()
 	config.Semantic = false
 	_, results, ok := validate.ValidateWithPlan(flow, nil, tr, config)

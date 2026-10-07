@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/choreoatlas2025/cli/internal/trace"
-	"gopkg.in/yaml.v3"
 )
 
 func runDiscover(args []string) {
@@ -35,20 +34,4 @@ func runDiscover(args []string) {
 	fmt.Printf("Generated FlowSpec: %s\n", *out)
 
 	fmt.Println("Dual contract generation complete! Please adjust the generated specifications as needed.")
-}
-
-// generateFlowYAML shares the trace-shaped DAG generator across both entry points.
-func generateFlowYAML(tr *trace.Trace, title, outServices string) (string, error) {
-	flow, err := buildDiscoveredFlow(tr, title, outServices)
-	if err != nil {
-		return "", err
-	}
-	if err := qualifyDiscoveredStructure(flow, tr); err != nil {
-		return "", err
-	}
-	data, err := yaml.Marshal(flow)
-	if err != nil {
-		return "", err
-	}
-	return string(data) + "# Generated from observed call instances and span relationships.\n# Review sampled conditions and add business requirements and data mappings.\n", nil
 }

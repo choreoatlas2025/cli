@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/choreoatlas2025/cli/internal/discovery"
 	"github.com/choreoatlas2025/cli/internal/spec"
 	"github.com/choreoatlas2025/cli/internal/trace"
 	"github.com/choreoatlas2025/cli/internal/validate"
@@ -56,7 +57,7 @@ func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noV
 		return err
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
-	files, err := spec.BuildServiceSpecFiles(tr.Spans)
+	files, err := discovery.BuildServiceSpecFiles(tr.Spans)
 	if err != nil {
 		return err
 	}
@@ -71,7 +72,7 @@ func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noV
 	// Both staged and final contracts refer to files relative to their own paths.
 	if !noValidate {
 		stagedFlow := filepath.Join(staging, "flow.yaml")
-		generated, err := generateFlowYAML(tr, title, staging)
+		generated, err := discovery.FlowYAML(tr, title, staging)
 		if err != nil {
 			return err
 		}
@@ -86,7 +87,7 @@ func discoverAndPersist(tr *trace.Trace, title, outPath, outServices string, noV
 	if err != nil {
 		return err
 	}
-	flowYAML, err := generateFlowYAML(tr, title, bindingDir)
+	flowYAML, err := discovery.FlowYAML(tr, title, bindingDir)
 	if err != nil {
 		return err
 	}

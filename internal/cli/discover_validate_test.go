@@ -3,23 +3,23 @@
 package cli
 
 import (
-    "os"
-    "path/filepath"
-    "testing"
+	"os"
+	"path/filepath"
+	"testing"
 
-    "github.com/choreoatlas2025/cli/internal/spec"
-    "github.com/choreoatlas2025/cli/internal/trace"
+	"github.com/choreoatlas2025/cli/internal/discovery"
+	"github.com/choreoatlas2025/cli/internal/trace"
 )
 
 func TestValidateAndPersistFlow_NormalizesHTTPAndPasses(t *testing.T) {
-    // Prepare temp workspace
-    dir := t.TempDir()
-    outFlow := filepath.Join(dir, "discovered.flowspec.yaml")
-    outServices := filepath.Join(dir, "services")
-    _ = os.MkdirAll(outServices, 0o755)
+	// Prepare temp workspace
+	dir := t.TempDir()
+	outFlow := filepath.Join(dir, "discovered.flowspec.yaml")
+	outServices := filepath.Join(dir, "services")
+	_ = os.MkdirAll(outServices, 0o755)
 
-    // Craft a trace with an invalid operation name (contains space and slash)
-    traceJSON := `{
+	// Craft a trace with an invalid operation name (contains space and slash)
+	traceJSON := `{
         "spans": [
           {
             "name": "GET /health",
@@ -30,64 +30,82 @@ func TestValidateAndPersistFlow_NormalizesHTTPAndPasses(t *testing.T) {
           }
         ]
     }`
-    tracePath := filepath.Join(dir, "invalid.trace.json")
-    if err := os.WriteFile(tracePath, []byte(traceJSON), 0o644); err != nil {
-        t.Fatalf("failed to write trace: %v", err)
-    }
+	tracePath := filepath.Join(dir, "invalid.trace.json")
+	if err := os.WriteFile(tracePath, []byte(traceJSON), 0o644); err != nil {
+		t.Fatalf("failed to write trace: %v", err)
+	}
 
-    tr, err := trace.LoadFromFile(tracePath)
-    if err != nil {
-        t.Fatalf("failed to load trace: %v", err)
-    }
+	tr, err := trace.LoadFromFile(tracePath)
+	if err != nil {
+		t.Fatalf("failed to load trace: %v", err)
+	}
 
-    // Generate service specs first (required by validation)
-    if err := spec.GenerateServiceSpecs(tr.Spans, outServices); err != nil {
-        t.Fatalf("failed to generate servicespecs: %v", err)
-    }
+	// Generate service specs first (required by validation)
+	if err := writeDiscoveredServices(tr.Spans, outServices); err != nil {
+		t.Fatalf("failed to generate servicespecs: %v", err)
+	}
 
-    // Generate Flow YAML and validate (should pass due to opId normalization)
-    yml, err := generateFlowYAML(tr, "From HTTP Trace", outServices)
-    if err != nil { t.Fatal(err) }
-    if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
-        t.Fatalf("expected validation to pass with normalized call, got: %v", err)
-    }
+	// Generate Flow YAML and validate (should pass due to opId normalization)
+	yml, err := discovery.FlowYAML(tr, "From HTTP Trace", outServices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
+		t.Fatalf("expected validation to pass with normalized call, got: %v", err)
+	}
 
-    if _, err := os.Stat(outFlow); err != nil {
-        t.Fatalf("expected flow file written after validation, stat error: %v", err)
-    }
+	if _, err := os.Stat(outFlow); err != nil {
+		t.Fatalf("expected flow file written after validation, stat error: %v", err)
+	}
 }
 
 func TestValidateAndPersistFlow_PassesOnValidExample(t *testing.T) {
-    dir := t.TempDir()
-    outFlow := filepath.Join(dir, "discovered.flowspec.yaml")
-    outServices := filepath.Join(dir, "services")
-    _ = os.MkdirAll(outServices, 0o755)
+	dir := t.TempDir()
+	outFlow := filepath.Join(dir, "discovered.flowspec.yaml")
+	outServices := filepath.Join(dir, "services")
+	_ = os.MkdirAll(outServices, 0o755)
 
-    // Use repo example trace with clean operation names
-    repoRoot, _ := os.Getwd()
-    exampleTrace := filepath.Join(repoRoot, "../../examples/traces/successful-order.trace.json")
-    // Normalize path relative to this test file location
-    if _, err := os.Stat(exampleTrace); err != nil {
-        t.Fatalf("example trace not found: %v", err)
-    }
+	// Use repo example trace with clean operation names
+	repoRoot, _ := os.Getwd()
+	exampleTrace := filepath.Join(repoRoot, "../../examples/traces/successful-order.trace.json")
+	// Normalize path relative to this test file location
+	if _, err := os.Stat(exampleTrace); err != nil {
+		t.Fatalf("example trace not found: %v", err)
+	}
 
-    tr, err := trace.LoadFromFile(exampleTrace)
-    if err != nil {
-        t.Fatalf("failed to load example trace: %v", err)
-    }
+	tr, err := trace.LoadFromFile(exampleTrace)
+	if err != nil {
+		t.Fatalf("failed to load example trace: %v", err)
+	}
 
-    // Generate ServiceSpecs required for validation
-    if err := spec.GenerateServiceSpecs(tr.Spans, outServices); err != nil {
-        t.Fatalf("failed to generate servicespecs: %v", err)
-    }
+	// Generate ServiceSpecs required for validation
+	if err := writeDiscoveredServices(tr.Spans, outServices); err != nil {
+		t.Fatalf("failed to generate servicespecs: %v", err)
+	}
 
-    yml, err := generateFlowYAML(tr, "From Example", outServices)
-    if err != nil { t.Fatal(err) }
-    if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
-        t.Fatalf("unexpected validation failure: %v", err)
-    }
+	yml, err := discovery.FlowYAML(tr, "From Example", outServices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAndPersistFlow(yml, outFlow, outServices); err != nil {
+		t.Fatalf("unexpected validation failure: %v", err)
+	}
 
-    if _, err := os.Stat(outFlow); err != nil {
-        t.Fatalf("expected validated flow written, stat error: %v", err)
-    }
+	if _, err := os.Stat(outFlow); err != nil {
+		t.Fatalf("expected validated flow written, stat error: %v", err)
+	}
+}
+
+// Test-side persistence is explicit: draft generation itself never writes.
+func writeDiscoveredServices(spans []trace.Span, directory string) error {
+	files, err := discovery.BuildServiceSpecFiles(spans)
+	if err != nil {
+		return err
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(directory, name), data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }

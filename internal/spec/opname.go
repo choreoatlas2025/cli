@@ -60,8 +60,8 @@ func extractHTTP(span trace.Span) (method string, path string, ok bool) {
 	return "", "", false
 }
 
-// operationSource preserves distinctions that the readable operation ID may lose.
-func operationSource(span trace.Span) string {
+// OperationSource preserves distinctions that the readable operation ID may lose.
+func OperationSource(span trace.Span) string {
 	if method, path, ok := extractHTTP(span); ok {
 		return "http:" + method + " " + path
 	}
